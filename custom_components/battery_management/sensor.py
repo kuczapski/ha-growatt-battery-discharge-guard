@@ -157,6 +157,26 @@ def calculate_energy_forecast(
     try:
         if start_time is None:
             start_time = datetime.now()
+            
+        # Ensure start_time is timezone-aware for proper comparison with sun times
+        if start_time.tzinfo is None:
+            try:
+                import pytz
+                tz = pytz.timezone(timezone)
+                start_time = tz.localize(start_time)
+            except ImportError:
+                # Fallback if pytz is not available
+                from datetime import timezone as dt_timezone, timedelta
+                # Assume local time with standard offset for the timezone
+                # This is a rough approximation
+                if 'Europe' in timezone:
+                    offset_hours = 1 if 'UTC' not in timezone else 0
+                    if 'Bucharest' in timezone or 'Eastern' in timezone:
+                        offset_hours = 2
+                    tz_offset = dt_timezone(timedelta(hours=offset_hours))
+                    start_time = start_time.replace(tzinfo=tz_offset)
+                else:
+                    start_time = start_time.replace(tzinfo=dt_timezone.utc)
 
         today = start_time.date()
         sun_times = get_sun_times(latitude, longitude, timezone, today)
@@ -178,23 +198,37 @@ def calculate_energy_forecast(
             _LOGGER.info("Past sunset, calculating forecast for tomorrow")
             tomorrow = today + timedelta(days=1)
             tomorrow_sun_times = get_sun_times(latitude, longitude, timezone, tomorrow)
-            
-            if tomorrow_sun_times and "sunrise" in tomorrow_sun_times and "sunset" in tomorrow_sun_times:
+
+            if (
+                tomorrow_sun_times
+                and "sunrise" in tomorrow_sun_times
+                and "sunset" in tomorrow_sun_times
+            ):
                 sunrise_time = tomorrow_sun_times["sunrise"]
                 sunset_time = tomorrow_sun_times["sunset"]
                 forecast_day = tomorrow
-                _LOGGER.info(f"Using tomorrow's times: sunrise={sunrise_time}, sunset={sunset_time}")
+                _LOGGER.info(
+                    f"Using tomorrow's times: sunrise={sunrise_time}, sunset={sunset_time}"
+                )
             else:
                 # Fallback to today's data if tomorrow calculation fails
-                _LOGGER.warning("Could not calculate tomorrow's sun times, using today's")
+                _LOGGER.warning(
+                    "Could not calculate tomorrow's sun times, using today's"
+                )
                 forecast_day = today
+        else:
+            # Not past sunset, use today's times
+            _LOGGER.info("Before sunset, using today's forecast")
+            forecast_day = today
 
         # Calculate full day forecast (sunrise to sunset)
         full_day_forecast = []
         total_daily_energy = 0
         current_time_full = sunrise_time
 
-        _LOGGER.debug(f"Calculating forecast from {sunrise_time} to {sunset_time} for {forecast_day}")
+        _LOGGER.debug(
+            f"Calculating forecast from {sunrise_time} to {sunset_time} for {forecast_day}"
+        )
 
         while current_time_full < sunset_time:
             # Get solar position
@@ -241,8 +275,12 @@ def calculate_energy_forecast(
             current_time_full += timedelta(minutes=5)
 
         # Determine if we need to calculate remaining forecast
-        original_sunset = get_sun_times(latitude, longitude, start_time.date()).get("sunset") if get_sun_times(latitude, longitude, start_time.date()) else sunset_time
-        
+        original_sunset = (
+            get_sun_times(latitude, longitude, start_time.date()).get("sunset")
+            if get_sun_times(latitude, longitude, start_time.date())
+            else sunset_time
+        )
+
         # If we're past today's sunset, there's no remaining energy for today
         if start_time >= original_sunset:
             return {
@@ -253,7 +291,11 @@ def calculate_energy_forecast(
                 "sunrise_time": sunrise_time.isoformat(),
                 "sunset_time": sunset_time.isoformat(),
                 "forecast_start": start_time.isoformat(),
-                "forecast_day": forecast_day.isoformat() if 'forecast_day' in locals() else today.isoformat(),
+                "forecast_day": (
+                    forecast_day.isoformat()
+                    if "forecast_day" in locals()
+                    else today.isoformat()
+                ),
             }
 
         # Calculate remaining forecast (from now until sunset)
@@ -312,7 +354,11 @@ def calculate_energy_forecast(
             "sunrise_time": sunrise_time.isoformat(),
             "sunset_time": sunset_time.isoformat(),
             "forecast_start": start_time.isoformat(),
-            "forecast_day": forecast_day.isoformat() if 'forecast_day' in locals() else today.isoformat(),
+            "forecast_day": (
+                forecast_day.isoformat()
+                if "forecast_day" in locals()
+                else today.isoformat()
+            ),
         }
 
     except Exception as e:
