@@ -91,7 +91,7 @@ def calculate_solar_position(latitude: float, longitude: float, dt: datetime) ->
             math.sin(h),
             math.cos(h) * math.sin(lat_rad) - math.tan(delta) * math.cos(lat_rad),
         )
-        
+
         # Convert azimuth to compass bearing (0° = North, 90° = East, 180° = South, 270° = West)
         azimuth = (math.degrees(azimuth) + 180) % 360
 
@@ -115,7 +115,7 @@ def calculate_panel_irradiance(
         # Return 0 if sun is below horizon
         if solar_elevation <= 0:
             return 0
-            
+
         # Convert to radians
         sun_el = math.radians(solar_elevation)
         sun_az = math.radians(solar_azimuth)
@@ -123,10 +123,9 @@ def calculate_panel_irradiance(
         panel_az_rad = math.radians(panel_azimuth)
 
         # Calculate angle of incidence between sun and panel normal
-        cos_incidence = (
-            math.sin(sun_el) * math.cos(panel_tilt_rad)
-            + math.cos(sun_el) * math.sin(panel_tilt_rad) * math.cos(sun_az - panel_az_rad)
-        )
+        cos_incidence = math.sin(sun_el) * math.cos(panel_tilt_rad) + math.cos(
+            sun_el
+        ) * math.sin(panel_tilt_rad) * math.cos(sun_az - panel_az_rad)
 
         # Ensure non-negative (sun behind panel gives 0)
         cos_incidence = max(0, cos_incidence)
@@ -139,14 +138,20 @@ def calculate_panel_irradiance(
         # Direct normal irradiance (W/m²) - simplified clear sky model
         dni = 900 * transmission
 
-        # Irradiance on panel surface
-        panel_irradiance = dni * cos_incidence
+        # Enhanced irradiance calculation with diffuse and reflected components
+        # Empirical clear-sky global horizontal irradiance
+        ghi = dni * math.sin(sun_el) + 120.0  # adds base diffuse
+        diffuse = 0.2 * ghi  # ~20% diffuse component
+        reflected = 0.2 * (1 - math.cos(panel_tilt_rad)) * ghi / 2  # albedo ~0.2
+
+        panel_irradiance = max(0, dni * cos_incidence + diffuse + reflected)
 
         # Debug logging for troubleshooting
         _LOGGER.debug(
-            f"🔍 Irradiance calc: sun_el={solar_elevation:.1f}°, sun_az={solar_azimuth:.1f}°, "
+            f"🔍 Enhanced irradiance calc: sun_el={solar_elevation:.1f}°, sun_az={solar_azimuth:.1f}°, "
             f"panel_tilt={panel_tilt:.1f}°, panel_az={panel_azimuth:.1f}°, "
-            f"cos_incidence={cos_incidence:.3f}, dni={dni:.1f}, result={panel_irradiance:.1f}"
+            f"cos_incidence={cos_incidence:.3f}, dni={dni:.1f}, ghi={ghi:.1f}, "
+            f"diffuse={diffuse:.1f}, reflected={reflected:.1f}, total={panel_irradiance:.1f}"
         )
 
         return max(0, panel_irradiance)
