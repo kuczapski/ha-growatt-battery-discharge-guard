@@ -50,9 +50,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["pv_max_power"] = "power_invalid"
             elif user_input["battery_capacity"] <= 0:
                 errors["battery_capacity"] = "capacity_invalid"
-            elif user_input["panel_tilt_angle"] < 0 or user_input["panel_tilt_angle"] > 90:
+            elif (
+                user_input["panel_tilt_angle"] < 0
+                or user_input["panel_tilt_angle"] > 90
+            ):
                 errors["panel_tilt_angle"] = "tilt_angle_invalid"
-            elif user_input["panel_orientation"] < 0 or user_input["panel_orientation"] >= 360:
+            elif (
+                user_input["panel_orientation"] < 0
+                or user_input["panel_orientation"] >= 360
+            ):
                 errors["panel_orientation"] = "orientation_invalid"
             elif not user_input.get("growatt_username"):
                 errors["growatt_username"] = "username_required"

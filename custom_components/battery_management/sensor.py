@@ -1,6 +1,7 @@
 """GROWATT Battery Discharge Guard sensor platform."""
 
 import logging
+import math
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -14,6 +15,8 @@ try:
 except ImportError:
     # Fallback for older astral versions
     from astral import Astral, Location
+
+    ASTRAL_V2 = False
 
     ASTRAL_V2 = False
 
@@ -36,6 +39,194 @@ def get_sun_times(latitude: float, longitude: float, timezone: str, date) -> dic
     except Exception as e:
         _LOGGER.error("Error calculating sun times: %s", e)
         return {}
+
+
+def calculate_solar_position(latitude: float, longitude: float, dt: datetime) -> dict:
+    """Calculate solar elevation and azimuth for a given time and location."""
+    try:
+        # Convert to Julian day
+        a = (14 - dt.month) // 12
+        y = dt.year - a
+        m = dt.month + 12 * a - 3
+        jd = (
+            dt.day
+            + (153 * m + 2) // 5
+            + 365 * y
+            + y // 4
+            - y // 100
+            + y // 400
+            + 1721119
+        )
+
+        # Add time of day
+        jd += (dt.hour - 12) / 24.0 + dt.minute / 1440.0 + dt.second / 86400.0
+
+        # Calculate solar position
+        n = jd - 2451545.0
+        L = (280.460 + 0.9856474 * n) % 360
+        g = math.radians((357.528 + 0.9856003 * n) % 360)
+        lambda_sun = math.radians(L + 1.915 * math.sin(g) + 0.020 * math.sin(2 * g))
+
+        # Declination
+        delta = math.asin(math.sin(math.radians(23.439)) * math.sin(lambda_sun))
+
+        # Hour angle
+        lat_rad = math.radians(latitude)
+        lon_rad = math.radians(longitude)
+
+        # Mean solar time
+        mst = dt.hour + dt.minute / 60.0 + dt.second / 3600.0
+
+        # Hour angle
+        h = math.radians(15 * (mst - 12) + longitude)
+
+        # Solar elevation
+        elevation = math.asin(
+            math.sin(lat_rad) * math.sin(delta)
+            + math.cos(lat_rad) * math.cos(delta) * math.cos(h)
+        )
+
+        # Solar azimuth
+        azimuth = math.atan2(
+            math.sin(h),
+            math.cos(h) * math.sin(lat_rad) - math.tan(delta) * math.cos(lat_rad),
+        )
+
+        return {
+            "elevation": math.degrees(elevation),
+            "azimuth": math.degrees(azimuth) % 360,
+        }
+    except Exception as e:
+        _LOGGER.error("Error calculating solar position: %s", e)
+        return {"elevation": 0, "azimuth": 0}
+
+
+def calculate_panel_irradiance(
+    solar_elevation: float,
+    solar_azimuth: float,
+    panel_tilt: float,
+    panel_azimuth: float,
+) -> float:
+    """Calculate irradiance on tilted panel surface."""
+    try:
+        # Convert to radians
+        sun_el = math.radians(max(0, solar_elevation))
+        sun_az = math.radians(solar_azimuth)
+        panel_tilt_rad = math.radians(panel_tilt)
+        panel_az_rad = math.radians(panel_azimuth)
+
+        # Calculate angle of incidence
+        cos_incidence = math.sin(sun_el) * math.cos(panel_tilt_rad) + math.cos(
+            sun_el
+        ) * math.sin(panel_tilt_rad) * math.cos(sun_az - panel_az_rad)
+
+        # Ensure non-negative
+        cos_incidence = max(0, cos_incidence)
+
+        # Direct normal irradiance (simplified clear sky model)
+        # This is a simplified model - in reality you'd use weather data
+        if solar_elevation > 0:
+            # Atmospheric transmission (simplified)
+            air_mass = 1 / math.sin(sun_el) if solar_elevation > 1 else 10
+            transmission = 0.7 ** (air_mass**0.678)
+
+            # Direct normal irradiance (W/m²)
+            dni = 900 * transmission  # Simplified clear sky model
+
+            # Irradiance on panel surface
+            panel_irradiance = dni * cos_incidence
+        else:
+            panel_irradiance = 0
+
+        return max(0, panel_irradiance)
+    except Exception as e:
+        _LOGGER.error("Error calculating panel irradiance: %s", e)
+        return 0
+
+
+def calculate_energy_forecast(
+    latitude: float,
+    longitude: float,
+    timezone: str,
+    panel_tilt: float,
+    panel_orientation: float,
+    pv_max_power: float,
+    start_time: datetime = None,
+) -> dict:
+    """Calculate energy production forecast in 5-minute intervals until sunset."""
+    try:
+        if start_time is None:
+            start_time = datetime.now()
+
+        today = start_time.date()
+        sun_times = get_sun_times(latitude, longitude, timezone, today)
+
+        if not sun_times or "sunset" not in sun_times:
+            return {"total_energy": 0, "forecast": []}
+
+        sunset_time = sun_times["sunset"]
+
+        # If already past sunset, return 0
+        if start_time >= sunset_time:
+            return {"total_energy": 0, "forecast": []}
+
+        forecast = []
+        total_energy = 0
+        current_time = start_time
+
+        # Calculate in 5-minute intervals until sunset
+        while current_time < sunset_time:
+            # Get solar position
+            solar_pos = calculate_solar_position(latitude, longitude, current_time)
+
+            # Calculate panel irradiance
+            irradiance = calculate_panel_irradiance(
+                solar_pos["elevation"],
+                solar_pos["azimuth"],
+                panel_tilt,
+                panel_orientation,
+            )
+
+            # Calculate power output (simplified)
+            # Assume 20% panel efficiency and 90% system efficiency
+            panel_efficiency = 0.20
+            system_efficiency = 0.90
+
+            # Power in kW (assuming pv_max_power is the panel area equivalent)
+            power_kw = (
+                (irradiance / 1000)
+                * pv_max_power
+                * panel_efficiency
+                * system_efficiency
+            )
+
+            # Energy in 5 minutes (kWh)
+            energy_5min = power_kw * (5 / 60)  # 5 minutes = 1/12 hour
+
+            forecast.append(
+                {
+                    "time": current_time.isoformat(),
+                    "solar_elevation": round(solar_pos["elevation"], 2),
+                    "solar_azimuth": round(solar_pos["azimuth"], 2),
+                    "irradiance": round(irradiance, 2),
+                    "power_kw": round(power_kw, 3),
+                    "energy_5min_kwh": round(energy_5min, 4),
+                }
+            )
+
+            total_energy += energy_5min
+            current_time += timedelta(minutes=5)
+
+        return {
+            "total_energy": round(total_energy, 3),
+            "forecast": forecast,
+            "sunset_time": sunset_time.isoformat(),
+            "forecast_start": start_time.isoformat(),
+        }
+
+    except Exception as e:
+        _LOGGER.error("Error calculating energy forecast: %s", e)
+        return {"total_energy": 0, "forecast": []}
 
 
 from homeassistant.components.sensor import (
@@ -83,6 +274,7 @@ async def async_setup_entry(
         BatteryChargingSensor(coordinator, config_entry),
         SunsetTimeSensor(coordinator, config_entry, hass),
         SunsetCountdownSensor(coordinator, config_entry, hass),
+        SolarEnergyForecastSensor(coordinator, config_entry, hass),
     ]
 
     async_add_entities(entities)
@@ -463,4 +655,137 @@ class SunsetCountdownSensor(SensorEntity):
     async def async_update(self) -> None:
         """Update the entity."""
         # This entity updates based on time/location, not coordinator data
+        pass
+
+
+class SolarEnergyForecastSensor(SensorEntity):
+    """Sensor showing forecasted solar energy production until sunset."""
+
+    def __init__(
+        self, coordinator: BatteryDataUpdateCoordinator, config_entry: ConfigEntry, hass
+    ) -> None:
+        """Initialize the sensor."""
+        self.coordinator = coordinator
+        self.config_entry = config_entry
+        self.hass = hass
+        self._attr_name = f"{config_entry.data[CONF_NAME]} Solar Energy Forecast"
+        self._attr_unique_id = f"{config_entry.entry_id}_solar_energy_forecast"
+        self._attr_device_class = SensorDeviceClass.ENERGY
+        self._attr_native_unit_of_measurement = "kWh"
+        self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_icon = "mdi:solar-power"
+
+    @property
+    def state(self) -> float | None:
+        """Return the forecasted energy production until sunset."""
+        try:
+            # Get Home Assistant's configured location
+            latitude = self.hass.config.latitude
+            longitude = self.hass.config.longitude
+            timezone = self.hass.config.time_zone
+
+            # Get solar panel configuration
+            panel_tilt = self.config_entry.data.get("panel_tilt_angle", 30.0)
+            panel_orientation = self.config_entry.data.get("panel_orientation", 180.0)
+            pv_max_power = self.config_entry.data.get("pv_max_power", 10.0)
+
+            # Calculate forecast
+            forecast_data = calculate_energy_forecast(
+                latitude=latitude,
+                longitude=longitude,
+                timezone=timezone,
+                panel_tilt=panel_tilt,
+                panel_orientation=panel_orientation,
+                pv_max_power=pv_max_power,
+            )
+
+            return forecast_data.get("total_energy", 0)
+
+        except Exception as e:
+            _LOGGER.error("Error calculating solar energy forecast: %s", e)
+            return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes with detailed forecast."""
+        try:
+            # Get Home Assistant's configured location
+            latitude = self.hass.config.latitude
+            longitude = self.hass.config.longitude
+            timezone = self.hass.config.time_zone
+
+            # Get solar panel configuration
+            panel_tilt = self.config_entry.data.get("panel_tilt_angle", 30.0)
+            panel_orientation = self.config_entry.data.get("panel_orientation", 180.0)
+            pv_max_power = self.config_entry.data.get("pv_max_power", 10.0)
+
+            # Calculate forecast
+            forecast_data = calculate_energy_forecast(
+                latitude=latitude,
+                longitude=longitude,
+                timezone=timezone,
+                panel_tilt=panel_tilt,
+                panel_orientation=panel_orientation,
+                pv_max_power=pv_max_power,
+            )
+
+            # Prepare attributes
+            attributes = {
+                "total_energy_kwh": forecast_data.get("total_energy", 0),
+                "forecast_intervals": len(forecast_data.get("forecast", [])),
+                "panel_tilt_angle": panel_tilt,
+                "panel_orientation": panel_orientation,
+                "pv_max_power_kw": pv_max_power,
+                "latitude": latitude,
+                "longitude": longitude,
+                "timezone": timezone,
+            }
+
+            # Add forecast data
+            if "forecast" in forecast_data:
+                attributes["forecast_5min_intervals"] = forecast_data["forecast"]
+
+            if "sunset_time" in forecast_data:
+                attributes["sunset_time"] = forecast_data["sunset_time"]
+
+            if "forecast_start" in forecast_data:
+                attributes["forecast_start"] = forecast_data["forecast_start"]
+
+            # Add summary statistics
+            forecast = forecast_data.get("forecast", [])
+            if forecast:
+                # Calculate peak power time
+                max_power_entry = max(forecast, key=lambda x: x.get("power_kw", 0))
+                attributes["peak_power_time"] = max_power_entry.get("time")
+                attributes["peak_power_kw"] = max_power_entry.get("power_kw", 0)
+
+                # Calculate average power
+                total_power = sum(entry.get("power_kw", 0) for entry in forecast)
+                attributes["average_power_kw"] = (
+                    round(total_power / len(forecast), 3) if forecast else 0
+                )
+
+            return attributes
+
+        except Exception as e:
+            _LOGGER.error("Error calculating forecast attributes: %s", e)
+            return {
+                "error": "Failed to calculate forecast",
+                "panel_tilt_angle": self.config_entry.data.get(
+                    "panel_tilt_angle", 30.0
+                ),
+                "panel_orientation": self.config_entry.data.get(
+                    "panel_orientation", 180.0
+                ),
+                "pv_max_power_kw": self.config_entry.data.get("pv_max_power", 10.0),
+            }
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return True
+
+    async def async_update(self) -> None:
+        """Update the entity."""
+        # This entity updates based on time/location/configuration, not coordinator data
         pass
