@@ -16,6 +16,9 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Required("name", default="GROWATT Battery Discharge Guard"): str,
         vol.Required("growatt_username"): str,
         vol.Required("growatt_password"): str,
+        vol.Optional("pv_max_power", default=10.0): vol.Coerce(float),
+        vol.Optional("battery_capacity", default=10.0): vol.Coerce(float),
+        vol.Optional("min_discharge_percentage", default=10): cv.positive_int,
         vol.Optional("update_interval", default=30): cv.positive_int,
         vol.Optional("low_battery_threshold", default=20): cv.positive_int,
     }
@@ -37,6 +40,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Validate the user input
             if user_input["low_battery_threshold"] > 100:
                 errors["low_battery_threshold"] = "threshold_too_high"
+            elif user_input["min_discharge_percentage"] > 100:
+                errors["min_discharge_percentage"] = "discharge_too_high"
+            elif user_input["min_discharge_percentage"] < 0:
+                errors["min_discharge_percentage"] = "discharge_too_low"
+            elif user_input["pv_max_power"] <= 0:
+                errors["pv_max_power"] = "power_invalid"
+            elif user_input["battery_capacity"] <= 0:
+                errors["battery_capacity"] = "capacity_invalid"
             elif not user_input.get("growatt_username"):
                 errors["growatt_username"] = "username_required"
             elif not user_input.get("growatt_password"):
@@ -87,6 +98,18 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         "growatt_password",
                         default=self.config_entry.data.get("growatt_password", ""),
                     ): str,
+                    vol.Optional(
+                        "pv_max_power",
+                        default=self.config_entry.data.get("pv_max_power", 10.0),
+                    ): vol.Coerce(float),
+                    vol.Optional(
+                        "battery_capacity",
+                        default=self.config_entry.data.get("battery_capacity", 10.0),
+                    ): vol.Coerce(float),
+                    vol.Optional(
+                        "min_discharge_percentage",
+                        default=self.config_entry.data.get("min_discharge_percentage", 10),
+                    ): cv.positive_int,
                     vol.Optional(
                         "update_interval",
                         default=self.config_entry.options.get("update_interval", 30),

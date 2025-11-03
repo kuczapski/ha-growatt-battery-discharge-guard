@@ -11,6 +11,9 @@ def mock_config_entry():
         "name": "Test GROWATT Battery Discharge Guard",
         "growatt_username": "test_user",
         "growatt_password": "test_password",
+        "pv_max_power": 15.0,
+        "battery_capacity": 12.5,
+        "min_discharge_percentage": 15,
         "update_interval": 30,
         "low_battery_threshold": 20,
     }

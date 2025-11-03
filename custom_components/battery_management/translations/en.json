@@ -8,6 +8,9 @@
                     "name": "Integration Name",
                     "growatt_username": "GROWATT Username",
                     "growatt_password": "GROWATT Password",
+                    "pv_max_power": "PV Installation Max Power (kW)",
+                    "battery_capacity": "Battery Capacity (kWh)",
+                    "min_discharge_percentage": "Minimum Discharge Percentage (%)",
                     "update_interval": "Update Interval (seconds)",
                     "low_battery_threshold": "Low Battery Threshold (%)"
                 }
@@ -15,6 +18,10 @@
         },
         "error": {
             "threshold_too_high": "Threshold cannot be higher than 100%",
+            "discharge_too_high": "Discharge percentage cannot be higher than 100%",
+            "discharge_too_low": "Discharge percentage cannot be negative",
+            "power_invalid": "PV max power must be greater than 0",
+            "capacity_invalid": "Battery capacity must be greater than 0",
             "username_required": "GROWATT username is required",
             "password_required": "GROWATT password is required"
         }
@@ -27,6 +34,9 @@
                 "data": {
                     "growatt_username": "GROWATT Username",
                     "growatt_password": "GROWATT Password",
+                    "pv_max_power": "PV Installation Max Power (kW)",
+                    "battery_capacity": "Battery Capacity (kWh)",
+                    "min_discharge_percentage": "Minimum Discharge Percentage (%)",
                     "update_interval": "Update Interval (seconds)",
                     "low_battery_threshold": "Low Battery Threshold (%)"
                 }
