@@ -202,8 +202,6 @@ def calculate_energy_forecast(
 
             # Only include intervals where sun is above horizon
             if solar_pos["elevation"] > 0:
-            # Only include intervals where sun is above horizon
-            if solar_pos["elevation"] > 0:
                 # Calculate panel irradiance
                 irradiance = calculate_panel_irradiance(
                     solar_pos["elevation"],
