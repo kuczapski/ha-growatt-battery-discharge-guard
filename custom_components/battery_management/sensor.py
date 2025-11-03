@@ -130,21 +130,21 @@ def calculate_panel_irradiance(
         # Ensure non-negative (sun behind panel gives 0)
         cos_incidence = max(0, cos_incidence)
 
-        # Atmospheric transmission (optimized for real-world peak observations)
+        # Atmospheric transmission (balanced for realistic daily totals)
         air_mass = 1 / math.sin(sun_el) if solar_elevation > 1 else 10
         air_mass = min(air_mass, 10)  # Cap at 10
-        # Enhanced transmission model for excellent clear sky conditions
-        transmission = 0.8 ** (air_mass**0.6)  # Very optimistic clear sky conditions
+        # Balanced transmission model - optimistic for peak, realistic for daily total
+        transmission = 0.78 ** (air_mass**0.62)  # Slightly more conservative
 
         # Enhanced Direct Normal Irradiance (W/m²) - calibrated to real observations
-        # Increased base DNI to reach observed 850-870 W/m² peak values
-        dni = 1200 * transmission  # Increased from 1100 to 1200
+        # Maintain peak values but reduce overestimation at low sun angles
+        dni = 1150 * transmission  # Reduced from 1200 to 1150
 
         # Enhanced irradiance calculation with diffuse and reflected components
         # Empirical clear-sky global horizontal irradiance
-        ghi = dni * math.sin(sun_el) + 180.0  # Increased base diffuse to 180
-        diffuse = 0.3 * ghi  # Increased diffuse component to 30%
-        reflected = 0.3 * (1 - math.cos(panel_tilt_rad)) * ghi / 2  # Increased albedo to 0.3
+        ghi = dni * math.sin(sun_el) + 160.0  # Reduced base diffuse from 180 to 160
+        diffuse = 0.25 * ghi  # Reduced diffuse component from 30% to 25%
+        reflected = 0.25 * (1 - math.cos(panel_tilt_rad)) * ghi / 2  # Reduced albedo from 0.3 to 0.25
 
         panel_irradiance = max(0, dni * cos_incidence + diffuse + reflected)
 

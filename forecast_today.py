@@ -100,15 +100,15 @@ def calculate_panel_irradiance(
     air_mass = 1 / math.sin(elev_rad) if elevation > 0 else float("inf")
     air_mass = min(air_mass, 10)  # Cap at 10
 
-    # Enhanced clear sky irradiance (calibrated to 850-870 W/m² real observations)
-    # Optimized transmission and increased base DNI for peak performance
-    transmission = 0.8 ** (air_mass**0.6)  # Very optimistic clear sky conditions
-    dni = 1200.0 * transmission  # Increased to 1200 to reach observed peak values
+    # Enhanced clear sky irradiance (balanced for realistic daily totals)
+    # Maintain peak performance while reducing daily overestimation
+    transmission = 0.78 ** (air_mass**0.62)  # Slightly more conservative
+    dni = 1150.0 * transmission  # Reduced from 1200 to 1150
 
     # Enhanced empirical clear-sky global horizontal irradiance
-    ghi = dni * math.sin(elev_rad) + 180.0  # Increased base diffuse to 180
-    diffuse = 0.3 * ghi  # Increased diffuse component to 30%
-    reflected = 0.3 * (1 - math.cos(tilt_rad)) * ghi / 2  # Increased albedo to 0.3
+    ghi = dni * math.sin(elev_rad) + 160.0  # Reduced base diffuse from 180 to 160
+    diffuse = 0.25 * ghi  # Reduced diffuse component from 30% to 25%
+    reflected = 0.25 * (1 - math.cos(tilt_rad)) * ghi / 2  # Reduced albedo from 0.3 to 0.25
 
     panel_irradiance = max(0, dni * cos_incidence + diffuse + reflected)
 
