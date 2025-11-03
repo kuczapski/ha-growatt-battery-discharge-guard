@@ -11,6 +11,8 @@
                     "pv_max_power": "PV Installation Max Power (kW)",
                     "battery_capacity": "Battery Capacity (kWh)",
                     "min_discharge_percentage": "Minimum Discharge Percentage (%)",
+                    "panel_tilt_angle": "Solar Panel Tilt Angle (°)",
+                    "panel_orientation": "Solar Panel Orientation (° from South)",
                     "update_interval": "Update Interval (seconds)",
                     "low_battery_threshold": "Low Battery Alert Threshold (%)"
                 }
@@ -22,6 +24,8 @@
             "discharge_too_low": "Discharge percentage cannot be negative",
             "power_invalid": "PV max power must be greater than 0 kW",
             "capacity_invalid": "Battery capacity must be greater than 0 kWh",
+            "tilt_angle_invalid": "Panel tilt angle must be between 0° and 90°",
+            "orientation_invalid": "Panel orientation must be between 0° and 359°",
             "username_required": "GROWATT username is required",
             "password_required": "GROWATT password is required"
         }
@@ -37,6 +41,8 @@
                     "pv_max_power": "PV Installation Max Power (kW)",
                     "battery_capacity": "Battery Capacity (kWh)",
                     "min_discharge_percentage": "Minimum Discharge Percentage (%)",
+                    "panel_tilt_angle": "Solar Panel Tilt Angle (°)",
+                    "panel_orientation": "Solar Panel Orientation (° from South)",
                     "update_interval": "Update Interval (seconds)",
                     "low_battery_threshold": "Low Battery Alert Threshold (%)"
                 }

@@ -49,6 +49,8 @@ The integration can be configured through the Home Assistant UI:
    - **PV Installation Max Power (kW)**: Maximum power output of your solar panels
    - **Battery Capacity (kWh)**: Total capacity of your battery system
    - **Minimum discharge percentage (%)**: Minimum battery level for discharge protection
+   - **Solar Panel Tilt Angle (°)**: Angle of your solar panels (0° = flat, 90° = vertical)
+   - **Solar Panel Orientation (° from South)**: Panel direction (0° = South, 90° = West, 180° = North, 270° = East)
    - **Update Interval**: How often to check battery status (seconds)
    - **Low Battery Threshold**: Battery level percentage to trigger low battery alerts
 
@@ -61,7 +63,7 @@ The integration can be configured through the Home Assistant UI:
 - `sensor.growatt_battery_discharge_guard_sunset_time`: Expected sunset time (timestamp)
 - `sensor.growatt_battery_discharge_guard_time_until_sunset`: Time remaining until sunset (duration in seconds)
 
-The sunset entities use your Home Assistant's configured location to calculate accurate sunrise and sunset times, enabling solar-aware battery management and energy planning.
+The sunset entities use your Home Assistant's configured location to calculate accurate sunrise and sunset times, enabling solar-aware battery management and energy planning. The solar panel tilt angle and orientation parameters enhance the accuracy of solar calculations for your specific installation.
 
 ### Switches
 

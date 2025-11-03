@@ -19,6 +19,8 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional("pv_max_power", default=10.0): vol.Coerce(float),
         vol.Optional("battery_capacity", default=10.0): vol.Coerce(float),
         vol.Optional("min_discharge_percentage", default=10): cv.positive_int,
+        vol.Optional("panel_tilt_angle", default=30.0): vol.Coerce(float),
+        vol.Optional("panel_orientation", default=180.0): vol.Coerce(float),
         vol.Optional("update_interval", default=30): cv.positive_int,
         vol.Optional("low_battery_threshold", default=20): cv.positive_int,
     }
@@ -48,6 +50,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["pv_max_power"] = "power_invalid"
             elif user_input["battery_capacity"] <= 0:
                 errors["battery_capacity"] = "capacity_invalid"
+            elif user_input["panel_tilt_angle"] < 0 or user_input["panel_tilt_angle"] > 90:
+                errors["panel_tilt_angle"] = "tilt_angle_invalid"
+            elif user_input["panel_orientation"] < 0 or user_input["panel_orientation"] >= 360:
+                errors["panel_orientation"] = "orientation_invalid"
             elif not user_input.get("growatt_username"):
                 errors["growatt_username"] = "username_required"
             elif not user_input.get("growatt_password"):

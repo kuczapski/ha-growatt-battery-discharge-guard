@@ -60,6 +60,7 @@ from .const import (
     UNIT_KW,
     UNIT_KWH,
     UNIT_PERCENTAGE,
+    UNIT_DEGREES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -110,6 +111,8 @@ class BatteryDataUpdateCoordinator(DataUpdateCoordinator):
         self.min_discharge_percentage = config_entry.data.get(
             "min_discharge_percentage", 10
         )
+        self.panel_tilt_angle = config_entry.data.get("panel_tilt_angle", 30.0)
+        self.panel_orientation = config_entry.data.get("panel_orientation", 180.0)
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch battery data."""
@@ -118,13 +121,16 @@ class BatteryDataUpdateCoordinator(DataUpdateCoordinator):
             # self.growatt_username and self.growatt_password
             # Configuration values available:
             # self.pv_max_power (kW), self.battery_capacity (kWh), self.min_discharge_percentage (%)
+            # self.panel_tilt_angle (°), self.panel_orientation (°)
             # For now, we'll simulate battery data
             _LOGGER.debug(
-                "Fetching battery data for GROWATT user: %s (PV: %skW, Battery: %skWh, Min discharge: %s%%)",
+                "Fetching battery data for GROWATT user: %s (PV: %skW, Battery: %skWh, Min discharge: %s%%, Panel tilt: %s°, Orientation: %s°)",
                 self.growatt_username,
                 self.pv_max_power,
                 self.battery_capacity,
                 self.min_discharge_percentage,
+                self.panel_tilt_angle,
+                self.panel_orientation,
             )
             return {
                 ATTR_BATTERY_LEVEL: 85,  # Simulated battery level
@@ -176,6 +182,14 @@ class BatteryLevelSensor(CoordinatorEntity, SensorEntity):
             "min_discharge_percentage": {
                 "value": self._config_entry.data.get("min_discharge_percentage", 10),
                 "unit": UNIT_PERCENTAGE,
+            },
+            "panel_tilt_angle": {
+                "value": self._config_entry.data.get("panel_tilt_angle", 30.0),
+                "unit": UNIT_DEGREES,
+            },
+            "panel_orientation": {
+                "value": self._config_entry.data.get("panel_orientation", 180.0),
+                "unit": UNIT_DEGREES,
             },
         }
 
@@ -322,7 +336,7 @@ class SunsetCountdownSensor(SensorEntity):
 
             # Calculate time difference
             now = datetime.now(sunset_time.tzinfo)
-            
+
             if sunset_time > now:
                 # Before sunset today - return time until sunset
                 time_diff = sunset_time - now
@@ -336,7 +350,7 @@ class SunsetCountdownSensor(SensorEntity):
                     if now < sunrise_tomorrow:
                         # It's nighttime (between sunset and sunrise) - return 0
                         return 0.0
-                
+
                 # After sunrise - calculate time until next sunset
                 if s_tomorrow and "sunset" in s_tomorrow:
                     sunset_tomorrow = s_tomorrow["sunset"]
@@ -377,7 +391,7 @@ class SunsetCountdownSensor(SensorEntity):
                 minutes = int((time_diff.total_seconds() % 3600) // 60)
                 human_readable = f"{hours}h {minutes}m"
                 next_sunset = sunset_time
-                
+
                 return {
                     "next_sunset": next_sunset.isoformat(),
                     "human_readable": human_readable,
@@ -392,13 +406,17 @@ class SunsetCountdownSensor(SensorEntity):
                 # After sunset - check if we're before tomorrow's sunrise
                 tomorrow = today + timedelta(days=1)
                 s_tomorrow = get_sun_times(latitude, longitude, timezone, tomorrow)
-                
+
                 if s_tomorrow and "sunrise" in s_tomorrow:
                     sunrise_tomorrow = s_tomorrow["sunrise"]
                     if now < sunrise_tomorrow:
                         # It's nighttime (between sunset and sunrise) - show 0
                         return {
-                            "next_sunset": s_tomorrow.get("sunset", sunset_time).isoformat() if s_tomorrow else sunset_time.isoformat(),
+                            "next_sunset": (
+                                s_tomorrow.get("sunset", sunset_time).isoformat()
+                                if s_tomorrow
+                                else sunset_time.isoformat()
+                            ),
                             "human_readable": "0h 0m (nighttime)",
                             "hours_remaining": 0,
                             "minutes_remaining": 0,
@@ -407,7 +425,7 @@ class SunsetCountdownSensor(SensorEntity):
                             "longitude": longitude,
                             "timezone": timezone,
                         }
-                
+
                 # After sunrise - show time until next sunset
                 if s_tomorrow and "sunset" in s_tomorrow:
                     next_sunset = s_tomorrow["sunset"]
@@ -415,7 +433,7 @@ class SunsetCountdownSensor(SensorEntity):
                     hours = int(time_diff.total_seconds() // 3600)
                     minutes = int((time_diff.total_seconds() % 3600) // 60)
                     human_readable = f"{hours}h {minutes}m"
-                    
+
                     return {
                         "next_sunset": next_sunset.isoformat(),
                         "human_readable": human_readable,
