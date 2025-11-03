@@ -9,10 +9,12 @@ try:
     # For astral >= 2.0
     from astral import LocationInfo
     from astral.sun import sun
+
     ASTRAL_V2 = True
 except ImportError:
     # Fallback for older astral versions
     from astral import Astral, Location
+
     ASTRAL_V2 = False
 
 
@@ -34,6 +36,7 @@ def get_sun_times(latitude: float, longitude: float, timezone: str, date) -> dic
     except Exception as e:
         _LOGGER.error("Error calculating sun times: %s", e)
         return {}
+
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -254,14 +257,14 @@ class SunsetTimeSensor(SensorEntity):
                     "longitude": longitude,
                     "timezone": timezone,
                 }
-                
+
                 # Add sun times if available
                 for key in ["sunrise", "sunset", "dawn", "dusk"]:
                     if key in s and s[key]:
                         attributes[key] = s[key].isoformat()
-                
+
                 return attributes
-            
+
             return {
                 "latitude": latitude,
                 "longitude": longitude,
@@ -310,21 +313,31 @@ class SunsetCountdownSensor(SensorEntity):
             # Calculate sunset for today
             today = datetime.now().date()
             s = get_sun_times(latitude, longitude, timezone, today)
-            
-            if not s or "sunset" not in s:
+
+            if not s or "sunset" not in s or "sunrise" not in s:
                 return None
-                
+
             sunset_time = s["sunset"]
+            sunrise_time = s["sunrise"]
 
             # Calculate time difference
             now = datetime.now(sunset_time.tzinfo)
+            
             if sunset_time > now:
+                # Before sunset today - return time until sunset
                 time_diff = sunset_time - now
                 return time_diff.total_seconds()
             else:
-                # Sunset has passed, calculate for tomorrow
+                # After sunset - check if we're before tomorrow's sunrise
                 tomorrow = today + timedelta(days=1)
                 s_tomorrow = get_sun_times(latitude, longitude, timezone, tomorrow)
+                if s_tomorrow and "sunrise" in s_tomorrow:
+                    sunrise_tomorrow = s_tomorrow["sunrise"]
+                    if now < sunrise_tomorrow:
+                        # It's nighttime (between sunset and sunrise) - return 0
+                        return 0.0
+                
+                # After sunrise - calculate time until next sunset
                 if s_tomorrow and "sunset" in s_tomorrow:
                     sunset_tomorrow = s_tomorrow["sunset"]
                     time_diff = sunset_tomorrow - now
@@ -345,33 +358,74 @@ class SunsetCountdownSensor(SensorEntity):
 
             today = datetime.now().date()
             s = get_sun_times(latitude, longitude, timezone, today)
-            
-            if not s or "sunset" not in s:
+
+            if not s or "sunset" not in s or "sunrise" not in s:
                 return {
                     "latitude": latitude,
                     "longitude": longitude,
                     "timezone": timezone,
                 }
-                
+
             sunset_time = s["sunset"]
+            sunrise_time = s["sunrise"]
             now = datetime.now(sunset_time.tzinfo)
 
             if sunset_time > now:
+                # Before sunset today - show time until sunset
                 time_diff = sunset_time - now
                 hours = int(time_diff.total_seconds() // 3600)
                 minutes = int((time_diff.total_seconds() % 3600) // 60)
                 human_readable = f"{hours}h {minutes}m"
                 next_sunset = sunset_time
+                
+                return {
+                    "next_sunset": next_sunset.isoformat(),
+                    "human_readable": human_readable,
+                    "hours_remaining": hours,
+                    "minutes_remaining": minutes,
+                    "is_nighttime": False,
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "timezone": timezone,
+                }
             else:
-                # Sunset has passed, show tomorrow's sunset
+                # After sunset - check if we're before tomorrow's sunrise
                 tomorrow = today + timedelta(days=1)
                 s_tomorrow = get_sun_times(latitude, longitude, timezone, tomorrow)
+                
+                if s_tomorrow and "sunrise" in s_tomorrow:
+                    sunrise_tomorrow = s_tomorrow["sunrise"]
+                    if now < sunrise_tomorrow:
+                        # It's nighttime (between sunset and sunrise) - show 0
+                        return {
+                            "next_sunset": s_tomorrow.get("sunset", sunset_time).isoformat() if s_tomorrow else sunset_time.isoformat(),
+                            "human_readable": "0h 0m (nighttime)",
+                            "hours_remaining": 0,
+                            "minutes_remaining": 0,
+                            "is_nighttime": True,
+                            "latitude": latitude,
+                            "longitude": longitude,
+                            "timezone": timezone,
+                        }
+                
+                # After sunrise - show time until next sunset
                 if s_tomorrow and "sunset" in s_tomorrow:
                     next_sunset = s_tomorrow["sunset"]
                     time_diff = next_sunset - now
                     hours = int(time_diff.total_seconds() // 3600)
                     minutes = int((time_diff.total_seconds() % 3600) // 60)
-                    human_readable = f"{hours}h {minutes}m (tomorrow)"
+                    human_readable = f"{hours}h {minutes}m"
+                    
+                    return {
+                        "next_sunset": next_sunset.isoformat(),
+                        "human_readable": human_readable,
+                        "hours_remaining": hours,
+                        "minutes_remaining": minutes,
+                        "is_nighttime": False,
+                        "latitude": latitude,
+                        "longitude": longitude,
+                        "timezone": timezone,
+                    }
                 else:
                     return {
                         "latitude": latitude,
@@ -379,15 +433,6 @@ class SunsetCountdownSensor(SensorEntity):
                         "timezone": timezone,
                     }
 
-            return {
-                "next_sunset": next_sunset.isoformat(),
-                "human_readable": human_readable,
-                "hours_remaining": int(time_diff.total_seconds() // 3600),
-                "minutes_remaining": int((time_diff.total_seconds() % 3600) // 60),
-                "latitude": latitude,
-                "longitude": longitude,
-                "timezone": timezone,
-            }
         except Exception as e:
             _LOGGER.error("Error calculating countdown attributes: %s", e)
             return {}
