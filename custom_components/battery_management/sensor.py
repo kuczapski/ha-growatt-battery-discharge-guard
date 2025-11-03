@@ -161,15 +161,72 @@ def calculate_energy_forecast(
         today = start_time.date()
         sun_times = get_sun_times(latitude, longitude, timezone, today)
 
-        if not sun_times or "sunset" not in sun_times:
-            return {"total_energy": 0, "forecast": []}
+        if not sun_times or "sunset" not in sun_times or "sunrise" not in sun_times:
+            return {"total_energy": 0, "forecast": [], "full_day_forecast": [], "total_daily_energy": 0}
 
+        sunrise_time = sun_times["sunrise"]
         sunset_time = sun_times["sunset"]
 
-        # If already past sunset, return 0
-        if start_time >= sunset_time:
-            return {"total_energy": 0, "forecast": []}
+        # Calculate full day forecast (sunrise to sunset)
+        full_day_forecast = []
+        total_daily_energy = 0
+        current_time_full = sunrise_time
 
+        while current_time_full < sunset_time:
+            # Get solar position
+            solar_pos = calculate_solar_position(latitude, longitude, current_time_full)
+
+            # Calculate panel irradiance
+            irradiance = calculate_panel_irradiance(
+                solar_pos["elevation"],
+                solar_pos["azimuth"],
+                panel_tilt,
+                panel_orientation,
+            )
+
+            # Calculate power output (simplified)
+            # Assume 20% panel efficiency and 90% system efficiency
+            panel_efficiency = 0.20
+            system_efficiency = 0.90
+
+            # Power in kW (assuming pv_max_power is the panel area equivalent)
+            power_kw = (
+                (irradiance / 1000)
+                * pv_max_power
+                * panel_efficiency
+                * system_efficiency
+            )
+
+            # Energy in 5 minutes (kWh)
+            energy_5min = power_kw * (5 / 60)  # 5 minutes = 1/12 hour
+
+            full_day_forecast.append(
+                {
+                    "time": current_time_full.isoformat(),
+                    "solar_elevation": round(solar_pos["elevation"], 2),
+                    "solar_azimuth": round(solar_pos["azimuth"], 2),
+                    "irradiance": round(irradiance, 2),
+                    "power_kw": round(power_kw, 3),
+                    "energy_5min_kwh": round(energy_5min, 4),
+                }
+            )
+
+            total_daily_energy += energy_5min
+            current_time_full += timedelta(minutes=5)
+
+        # If already past sunset, return 0 for remaining energy but keep full day forecast
+        if start_time >= sunset_time:
+            return {
+                "total_energy": 0, 
+                "forecast": [],
+                "full_day_forecast": full_day_forecast,
+                "total_daily_energy": round(total_daily_energy, 3),
+                "sunrise_time": sunrise_time.isoformat(),
+                "sunset_time": sunset_time.isoformat(),
+                "forecast_start": start_time.isoformat(),
+            }
+
+        # Calculate remaining forecast (from now until sunset)
         forecast = []
         total_energy = 0
         current_time = start_time
@@ -220,13 +277,16 @@ def calculate_energy_forecast(
         return {
             "total_energy": round(total_energy, 3),
             "forecast": forecast,
+            "full_day_forecast": full_day_forecast,
+            "total_daily_energy": round(total_daily_energy, 3),
+            "sunrise_time": sunrise_time.isoformat(),
             "sunset_time": sunset_time.isoformat(),
             "forecast_start": start_time.isoformat(),
         }
 
     except Exception as e:
         _LOGGER.error("Error calculating energy forecast: %s", e)
-        return {"total_energy": 0, "forecast": []}
+        return {"total_energy": 0, "forecast": [], "full_day_forecast": [], "total_daily_energy": 0}
 
 
 from homeassistant.components.sensor import (
@@ -733,6 +793,8 @@ class SolarEnergyForecastSensor(SensorEntity):
             attributes = {
                 "total_energy_kwh": forecast_data.get("total_energy", 0),
                 "forecast_intervals": len(forecast_data.get("forecast", [])),
+                "total_daily_energy_kwh": forecast_data.get("total_daily_energy", 0),
+                "full_day_intervals": len(forecast_data.get("full_day_forecast", [])),
                 "panel_tilt_angle": panel_tilt,
                 "panel_orientation": panel_orientation,
                 "pv_max_power_kw": pv_max_power,
@@ -741,9 +803,17 @@ class SolarEnergyForecastSensor(SensorEntity):
                 "timezone": timezone,
             }
 
-            # Add forecast data
+            # Add forecast data (remaining energy from now until sunset)
             if "forecast" in forecast_data:
                 attributes["forecast_5min_intervals"] = forecast_data["forecast"]
+
+            # Add full day forecast data (sunrise to sunset)
+            if "full_day_forecast" in forecast_data:
+                attributes["full_day_forecast_5min_intervals"] = forecast_data["full_day_forecast"]
+
+            # Add time information
+            if "sunrise_time" in forecast_data:
+                attributes["sunrise_time"] = forecast_data["sunrise_time"]
 
             if "sunset_time" in forecast_data:
                 attributes["sunset_time"] = forecast_data["sunset_time"]
@@ -751,18 +821,32 @@ class SolarEnergyForecastSensor(SensorEntity):
             if "forecast_start" in forecast_data:
                 attributes["forecast_start"] = forecast_data["forecast_start"]
 
-            # Add summary statistics
+            # Add summary statistics for remaining forecast
             forecast = forecast_data.get("forecast", [])
             if forecast:
-                # Calculate peak power time
+                # Calculate peak power time from remaining forecast
                 max_power_entry = max(forecast, key=lambda x: x.get("power_kw", 0))
-                attributes["peak_power_time"] = max_power_entry.get("time")
-                attributes["peak_power_kw"] = max_power_entry.get("power_kw", 0)
+                attributes["peak_power_time_remaining"] = max_power_entry.get("time")
+                attributes["peak_power_kw_remaining"] = max_power_entry.get("power_kw", 0)
 
-                # Calculate average power
+                # Calculate average power for remaining forecast
                 total_power = sum(entry.get("power_kw", 0) for entry in forecast)
-                attributes["average_power_kw"] = (
+                attributes["average_power_kw_remaining"] = (
                     round(total_power / len(forecast), 3) if forecast else 0
+                )
+
+            # Add summary statistics for full day forecast
+            full_day_forecast = forecast_data.get("full_day_forecast", [])
+            if full_day_forecast:
+                # Calculate peak power time for full day
+                max_power_entry_day = max(full_day_forecast, key=lambda x: x.get("power_kw", 0))
+                attributes["peak_power_time_daily"] = max_power_entry_day.get("time")
+                attributes["peak_power_kw_daily"] = max_power_entry_day.get("power_kw", 0)
+
+                # Calculate average power for full day
+                total_power_day = sum(entry.get("power_kw", 0) for entry in full_day_forecast)
+                attributes["average_power_kw_daily"] = (
+                    round(total_power_day / len(full_day_forecast), 3) if full_day_forecast else 0
                 )
 
             return attributes
