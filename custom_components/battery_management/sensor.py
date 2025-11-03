@@ -77,8 +77,8 @@ def calculate_solar_position(latitude: float, longitude: float, dt: datetime) ->
         # Mean solar time
         mst = dt.hour + dt.minute / 60.0 + dt.second / 3600.0
 
-        # Hour angle
-        h = math.radians(15 * (mst - 12) + longitude)
+        # Hour angle (corrected formula)
+        h = math.radians(15 * (mst - 12) - longitude)
 
         # Solar elevation
         elevation = math.asin(
@@ -86,15 +86,18 @@ def calculate_solar_position(latitude: float, longitude: float, dt: datetime) ->
             + math.cos(lat_rad) * math.cos(delta) * math.cos(h)
         )
 
-        # Solar azimuth
+        # Solar azimuth (corrected to give proper compass direction)
         azimuth = math.atan2(
             math.sin(h),
             math.cos(h) * math.sin(lat_rad) - math.tan(delta) * math.cos(lat_rad),
         )
+        
+        # Convert azimuth to compass bearing (0° = North, 90° = East, 180° = South, 270° = West)
+        azimuth = (math.degrees(azimuth) + 180) % 360
 
         return {
             "elevation": math.degrees(elevation),
-            "azimuth": math.degrees(azimuth) % 360,
+            "azimuth": azimuth,
         }
     except Exception as e:
         _LOGGER.error("Error calculating solar position: %s", e)
@@ -109,34 +112,42 @@ def calculate_panel_irradiance(
 ) -> float:
     """Calculate irradiance on tilted panel surface."""
     try:
+        # Return 0 if sun is below horizon
+        if solar_elevation <= 0:
+            return 0
+            
         # Convert to radians
-        sun_el = math.radians(max(0, solar_elevation))
+        sun_el = math.radians(solar_elevation)
         sun_az = math.radians(solar_azimuth)
         panel_tilt_rad = math.radians(panel_tilt)
         panel_az_rad = math.radians(panel_azimuth)
 
-        # Calculate angle of incidence
-        cos_incidence = math.sin(sun_el) * math.cos(panel_tilt_rad) + math.cos(
-            sun_el
-        ) * math.sin(panel_tilt_rad) * math.cos(sun_az - panel_az_rad)
+        # Calculate angle of incidence between sun and panel normal
+        cos_incidence = (
+            math.sin(sun_el) * math.cos(panel_tilt_rad)
+            + math.cos(sun_el) * math.sin(panel_tilt_rad) * math.cos(sun_az - panel_az_rad)
+        )
 
-        # Ensure non-negative
+        # Ensure non-negative (sun behind panel gives 0)
         cos_incidence = max(0, cos_incidence)
 
-        # Direct normal irradiance (simplified clear sky model)
-        # This is a simplified model - in reality you'd use weather data
-        if solar_elevation > 0:
-            # Atmospheric transmission (simplified)
-            air_mass = 1 / math.sin(sun_el) if solar_elevation > 1 else 10
-            transmission = 0.7 ** (air_mass**0.678)
+        # Atmospheric transmission (simplified)
+        air_mass = 1 / math.sin(sun_el) if solar_elevation > 1 else 10
+        air_mass = min(air_mass, 10)  # Cap at 10
+        transmission = 0.7 ** (air_mass**0.678)
 
-            # Direct normal irradiance (W/m²)
-            dni = 900 * transmission  # Simplified clear sky model
+        # Direct normal irradiance (W/m²) - simplified clear sky model
+        dni = 900 * transmission
 
-            # Irradiance on panel surface
-            panel_irradiance = dni * cos_incidence
-        else:
-            panel_irradiance = 0
+        # Irradiance on panel surface
+        panel_irradiance = dni * cos_incidence
+
+        # Debug logging for troubleshooting
+        _LOGGER.debug(
+            f"🔍 Irradiance calc: sun_el={solar_elevation:.1f}°, sun_az={solar_azimuth:.1f}°, "
+            f"panel_tilt={panel_tilt:.1f}°, panel_az={panel_azimuth:.1f}°, "
+            f"cos_incidence={cos_incidence:.3f}, dni={dni:.1f}, result={panel_irradiance:.1f}"
+        )
 
         return max(0, panel_irradiance)
     except Exception as e:
@@ -153,27 +164,36 @@ def calculate_energy_forecast(
     pv_max_power: float,
     start_time: datetime = None,
 ) -> dict:
-    """Calculate energy production forecast in 5-minute intervals until sunset."""
+    """Calculate energy production forecast in 15-minute intervals until sunset."""
     try:
         if start_time is None:
             start_time = datetime.now()
-            
+
+        _LOGGER.info(
+            f"📊 Starting energy forecast calculation: "
+            f"lat={latitude:.2f}, lon={longitude:.2f}, tz={timezone}, "
+            f"tilt={panel_tilt}°, orientation={panel_orientation}°, "
+            f"max_power={pv_max_power}kW, start={start_time.isoformat()}"
+        )
+
         # Ensure start_time is timezone-aware for proper comparison with sun times
         if start_time.tzinfo is None:
             try:
                 import pytz
+
                 tz = pytz.timezone(timezone)
                 start_time = tz.localize(start_time)
             except ImportError:
                 # Fallback if pytz is not available
-                from datetime import timezone as dt_timezone, timedelta
+                from datetime import timezone as dt_timezone, timedelta as td
+
                 # Assume local time with standard offset for the timezone
                 # This is a rough approximation
-                if 'Europe' in timezone:
-                    offset_hours = 1 if 'UTC' not in timezone else 0
-                    if 'Bucharest' in timezone or 'Eastern' in timezone:
+                if "Europe" in timezone:
+                    offset_hours = 1 if "UTC" not in timezone else 0
+                    if "Bucharest" in timezone or "Eastern" in timezone:
                         offset_hours = 2
-                    tz_offset = dt_timezone(timedelta(hours=offset_hours))
+                    tz_offset = dt_timezone(td(hours=offset_hours))
                     start_time = start_time.replace(tzinfo=tz_offset)
                 else:
                     start_time = start_time.replace(tzinfo=dt_timezone.utc)
@@ -182,6 +202,7 @@ def calculate_energy_forecast(
         sun_times = get_sun_times(latitude, longitude, timezone, today)
 
         if not sun_times or "sunset" not in sun_times or "sunrise" not in sun_times:
+            _LOGGER.warning(f"❌ Could not get sun times for {today}")
             return {
                 "total_energy": 0,
                 "forecast": [],
@@ -192,10 +213,15 @@ def calculate_energy_forecast(
         sunrise_time = sun_times["sunrise"]
         sunset_time = sun_times["sunset"]
 
+        _LOGGER.info(
+            f"🌅 Sun times for {today}: sunrise={sunrise_time.isoformat()}, "
+            f"sunset={sunset_time.isoformat()}"
+        )
+
         # Check if we're past sunset - if so, calculate for tomorrow
         forecast_day = today
         if start_time >= sunset_time:
-            _LOGGER.info("Past sunset, calculating forecast for tomorrow")
+            _LOGGER.info("🌙 Past sunset, calculating forecast for tomorrow")
             tomorrow = today + timedelta(days=1)
             tomorrow_sun_times = get_sun_times(latitude, longitude, timezone, tomorrow)
 
@@ -208,81 +234,134 @@ def calculate_energy_forecast(
                 sunset_time = tomorrow_sun_times["sunset"]
                 forecast_day = tomorrow
                 _LOGGER.info(
-                    f"Using tomorrow's times: sunrise={sunrise_time}, sunset={sunset_time}"
+                    f"🌅 Using tomorrow's times: sunrise={sunrise_time.isoformat()}, "
+                    f"sunset={sunset_time.isoformat()}"
                 )
             else:
                 # Fallback to today's data if tomorrow calculation fails
                 _LOGGER.warning(
-                    "Could not calculate tomorrow's sun times, using today's"
+                    "⚠️ Could not calculate tomorrow's sun times, using today's"
                 )
                 forecast_day = today
         else:
             # Not past sunset, use today's times
-            _LOGGER.info("Before sunset, using today's forecast")
+            _LOGGER.info("☀️ Before sunset, using today's forecast")
             forecast_day = today
 
-        # Calculate full day forecast (sunrise to sunset)
+        # Calculate full day forecast (24 hours in 5-minute intervals = 288 intervals)
         full_day_forecast = []
         total_daily_energy = 0
-        current_time_full = sunrise_time
+
+        # Start from midnight of the forecast day
+        forecast_day_start = forecast_day
+        if hasattr(forecast_day_start, "date"):
+            # It's a datetime, get the date part
+            forecast_day_start = datetime.combine(
+                forecast_day_start.date(), datetime.min.time()
+            )
+        else:
+            # It's already a date, convert to datetime
+            forecast_day_start = datetime.combine(
+                forecast_day_start, datetime.min.time()
+            )
+
+        # Make timezone-aware
+        try:
+            import pytz
+
+            tz = pytz.timezone(timezone)
+            current_time_full = tz.localize(forecast_day_start)
+        except ImportError:
+            current_time_full = forecast_day_start.replace(tzinfo=dt_timezone.utc)
 
         _LOGGER.debug(
-            f"Calculating forecast from {sunrise_time} to {sunset_time} for {forecast_day}"
+            f"📈 Calculating full day forecast from {current_time_full} for {forecast_day} (24h = 96 intervals @ 15min)"
         )
 
-        while current_time_full < sunset_time:
+        # Generate 96 intervals (24 hours * 4 intervals per hour @ 15min each)
+        interval_count = 0
+        energy_intervals = 0
+        peak_power = 0
+        peak_time = None
+
+        for interval in range(96):
             # Get solar position
             solar_pos = calculate_solar_position(latitude, longitude, current_time_full)
 
-            # Only include intervals where sun is above horizon
-            if solar_pos["elevation"] > 0:
-                # Calculate panel irradiance
-                irradiance = calculate_panel_irradiance(
-                    solar_pos["elevation"],
-                    solar_pos["azimuth"],
-                    panel_tilt,
-                    panel_orientation,
-                )
+            # Calculate panel irradiance
+            irradiance = calculate_panel_irradiance(
+                solar_pos["elevation"],
+                solar_pos["azimuth"],
+                panel_tilt,
+                panel_orientation,
+            )
 
-                # Calculate power output (simplified)
-                # Assume 20% panel efficiency and 90% system efficiency
-                panel_efficiency = 0.20
-                system_efficiency = 0.90
+            # Calculate power output - pv_max_power is already the rated power
+            # Use simplified irradiance-to-power conversion
+            if solar_pos["elevation"] > 0 and irradiance > 0:
+                # Standard Test Conditions: 1000 W/m²
+                # Power scales linearly with irradiance
+                power_kw = pv_max_power * (irradiance / 1000.0)
+                power_kw = max(0, min(power_kw, pv_max_power))  # Cap at max power
+            else:
+                power_kw = 0.0
 
-                # Power in kW (assuming pv_max_power is the panel area equivalent)
-                power_kw = (
-                    (irradiance / 1000)
-                    * pv_max_power
-                    * panel_efficiency
-                    * system_efficiency
-                )
+            # Track peak power
+            if power_kw > peak_power:
+                peak_power = power_kw
+                peak_time = current_time_full
 
-                # Energy in 5 minutes (kWh)
-                energy_5min = power_kw * (5 / 60)  # 5 minutes = 1/12 hour
+            # Energy in 15 minutes (kWh)
+            energy_15min = power_kw * (15 / 60)  # 15 minutes = 1/4 hour
 
-                full_day_forecast.append(
-                    {
-                        "time": current_time_full.isoformat(),
-                        "solar_elevation": round(solar_pos["elevation"], 2),
-                        "solar_azimuth": round(solar_pos["azimuth"], 2),
-                        "irradiance": round(irradiance, 2),
-                        "power_kw": round(power_kw, 3),
-                        "energy_5min_kwh": round(energy_5min, 4),
-                    }
-                )
+            # Log detailed calculation for each interval
+            _LOGGER.debug(
+                f"⚡ Interval {interval+1}/96: {current_time_full.strftime('%H:%M')} - "
+                f"Elevation: {solar_pos['elevation']:.1f}°, "
+                f"Azimuth: {solar_pos['azimuth']:.1f}°, "
+                f"Irradiance: {irradiance:.1f} W/m², "
+                f"Power: {power_kw:.3f} kW, "
+                f"Energy: {energy_15min:.4f} kWh"
+            )
 
-                total_daily_energy += energy_5min
-            current_time_full += timedelta(minutes=5)
+            full_day_forecast.append(
+                {
+                    "time": current_time_full.isoformat(),
+                    "solar_elevation": round(solar_pos["elevation"], 2),
+                    "solar_azimuth": round(solar_pos["azimuth"], 2),
+                    "irradiance": round(irradiance, 2),
+                    "power_kw": round(power_kw, 3),
+                    "energy_15min_kwh": round(energy_15min, 4),
+                }
+            )
 
-        # Determine if we need to calculate remaining forecast
+            if power_kw > 0:  # Only add energy during daylight
+                total_daily_energy += energy_15min
+                energy_intervals += 1
+
+            interval_count += 1
+            current_time_full += timedelta(minutes=15)
+
+        _LOGGER.info(
+            f"📊 Full day forecast complete: {interval_count} total intervals, "
+            f"{energy_intervals} with energy, peak {peak_power:.3f}kW at "
+            f"{peak_time.strftime('%H:%M') if peak_time else 'N/A'}, "
+            f"total daily energy: {total_daily_energy:.3f}kWh"
+        )  # Determine if we need to calculate remaining forecast
         original_sunset = (
-            get_sun_times(latitude, longitude, start_time.date()).get("sunset")
-            if get_sun_times(latitude, longitude, start_time.date())
+            get_sun_times(latitude, longitude, timezone, start_time.date()).get(
+                "sunset"
+            )
+            if get_sun_times(latitude, longitude, timezone, start_time.date())
             else sunset_time
         )
 
         # If we're past today's sunset, there's no remaining energy for today
         if start_time >= original_sunset:
+            _LOGGER.info(
+                f"🌇 Past original sunset ({original_sunset.isoformat()}), "
+                f"no remaining energy for today"
+            )
             return {
                 "total_energy": 0,
                 "forecast": [],
@@ -302,8 +381,14 @@ def calculate_energy_forecast(
         forecast = []
         total_energy = 0
         current_time = start_time
+        remaining_intervals = 0
 
-        # Calculate in 5-minute intervals until sunset
+        _LOGGER.info(
+            f"⏰ Calculating remaining forecast from {start_time.isoformat()} "
+            f"until {sunset_time.isoformat()} using 15-minute intervals"
+        )
+
+        # Calculate in 15-minute intervals until sunset
         while current_time < sunset_time:
             # Get solar position
             solar_pos = calculate_solar_position(latitude, longitude, current_time)
@@ -316,21 +401,28 @@ def calculate_energy_forecast(
                 panel_orientation,
             )
 
-            # Calculate power output (simplified)
-            # Assume 20% panel efficiency and 90% system efficiency
-            panel_efficiency = 0.20
-            system_efficiency = 0.90
+            # Calculate power output - pv_max_power is already the rated power
+            # Use simplified irradiance-to-power conversion
+            if solar_pos["elevation"] > 0 and irradiance > 0:
+                # Standard Test Conditions: 1000 W/m²
+                # Power scales linearly with irradiance
+                power_kw = pv_max_power * (irradiance / 1000.0)
+                power_kw = max(0, min(power_kw, pv_max_power))  # Cap at max power
+            else:
+                power_kw = 0.0
 
-            # Power in kW (assuming pv_max_power is the panel area equivalent)
-            power_kw = (
-                (irradiance / 1000)
-                * pv_max_power
-                * panel_efficiency
-                * system_efficiency
+            # Energy in 15 minutes (kWh)
+            energy_15min = power_kw * (15 / 60)  # 15 minutes = 1/4 hour
+
+            # Log detailed calculation for remaining intervals
+            _LOGGER.debug(
+                f"🔋 Remaining {remaining_intervals+1}: {current_time.strftime('%H:%M')} - "
+                f"Elevation: {solar_pos['elevation']:.1f}°, "
+                f"Azimuth: {solar_pos['azimuth']:.1f}°, "
+                f"Irradiance: {irradiance:.1f} W/m², "
+                f"Power: {power_kw:.3f} kW, "
+                f"Energy: {energy_15min:.4f} kWh"
             )
-
-            # Energy in 5 minutes (kWh)
-            energy_5min = power_kw * (5 / 60)  # 5 minutes = 1/12 hour
 
             forecast.append(
                 {
@@ -339,12 +431,18 @@ def calculate_energy_forecast(
                     "solar_azimuth": round(solar_pos["azimuth"], 2),
                     "irradiance": round(irradiance, 2),
                     "power_kw": round(power_kw, 3),
-                    "energy_5min_kwh": round(energy_5min, 4),
+                    "energy_15min_kwh": round(energy_15min, 4),
                 }
             )
 
-            total_energy += energy_5min
-            current_time += timedelta(minutes=5)
+            total_energy += energy_15min
+            remaining_intervals += 1
+            current_time += timedelta(minutes=15)
+
+        _LOGGER.info(
+            f"🔋 Remaining forecast complete: {remaining_intervals} intervals, "
+            f"total remaining energy: {total_energy:.3f}kWh"
+        )
 
         return {
             "total_energy": round(total_energy, 3),
@@ -362,7 +460,7 @@ def calculate_energy_forecast(
         }
 
     except Exception as e:
-        _LOGGER.error("Error calculating energy forecast: %s", e)
+        _LOGGER.error("❌ Error calculating energy forecast: %s", e, exc_info=True)
         return {
             "total_energy": 0,
             "forecast": [],
@@ -431,6 +529,10 @@ class BatteryDataUpdateCoordinator(DataUpdateCoordinator):
             seconds=config_entry.data.get("update_interval", 30)
         )
 
+        _LOGGER.info(
+            f"🔄 Battery Data Coordinator: Initialized with {update_interval.total_seconds()}s update interval"
+        )
+
         super().__init__(
             hass,
             _LOGGER,
@@ -458,7 +560,7 @@ class BatteryDataUpdateCoordinator(DataUpdateCoordinator):
             # self.panel_tilt_angle (°), self.panel_orientation (°)
             # For now, we'll simulate battery data
             _LOGGER.debug(
-                "Fetching battery data for GROWATT user: %s (PV: %skW, Battery: %skWh, Min discharge: %s%%, Panel tilt: %s°, Orientation: %s°)",
+                "🔋 Fetching battery data for GROWATT user: %s (PV: %skW, Battery: %skWh, Min discharge: %s%%, Panel tilt: %s°, Orientation: %s°)",
                 self.growatt_username,
                 self.pv_max_power,
                 self.battery_capacity,
@@ -831,6 +933,13 @@ class SolarEnergyForecastSensor(SensorEntity):
             panel_orientation = self.config_entry.data.get("panel_orientation", 180.0)
             pv_max_power = self.config_entry.data.get("pv_max_power", 10.0)
 
+            _LOGGER.info(
+                "🌞 Solar Energy Forecast: Starting calculation - "
+                f"Location: {latitude:.2f}°N, {longitude:.2f}°E, "
+                f"Timezone: {timezone}, Panel: {panel_tilt}°/{panel_orientation}°, "
+                f"Max Power: {pv_max_power} kW"
+            )
+
             # Calculate forecast
             forecast_data = calculate_energy_forecast(
                 latitude=latitude,
@@ -841,7 +950,12 @@ class SolarEnergyForecastSensor(SensorEntity):
                 pv_max_power=pv_max_power,
             )
 
-            return forecast_data.get("total_energy", 0)
+            total_energy = forecast_data.get("total_energy", 0)
+            _LOGGER.info(
+                f"🔋 Solar Energy Forecast: Total remaining energy = {total_energy:.3f} kWh"
+            )
+
+            return total_energy
 
         except Exception as e:
             _LOGGER.error("Error calculating solar energy forecast: %s", e)
@@ -860,6 +974,8 @@ class SolarEnergyForecastSensor(SensorEntity):
             panel_tilt = self.config_entry.data.get("panel_tilt_angle", 30.0)
             panel_orientation = self.config_entry.data.get("panel_orientation", 180.0)
             pv_max_power = self.config_entry.data.get("pv_max_power", 10.0)
+
+            _LOGGER.debug("📋 Solar Energy Forecast: Calculating attributes")
 
             # Calculate forecast
             forecast_data = calculate_energy_forecast(
@@ -885,13 +1001,19 @@ class SolarEnergyForecastSensor(SensorEntity):
                 "timezone": timezone,
             }
 
+            _LOGGER.debug(
+                f"📈 Solar Energy Forecast: Attributes calculated - "
+                f"Remaining: {attributes['total_energy_kwh']:.3f}kWh ({attributes['forecast_intervals']} intervals), "
+                f"Daily: {attributes['total_daily_energy_kwh']:.3f}kWh ({attributes['full_day_intervals']} intervals)"
+            )
+
             # Add forecast data (remaining energy from now until sunset)
             if "forecast" in forecast_data:
-                attributes["forecast_5min_intervals"] = forecast_data["forecast"]
+                attributes["forecast_15min_intervals"] = forecast_data["forecast"]
 
-            # Add full day forecast data (sunrise to sunset)
+            # Add full day forecast data (24 hours in 15-minute intervals)
             if "full_day_forecast" in forecast_data:
-                attributes["full_day_forecast_5min_intervals"] = forecast_data[
+                attributes["full_day_forecast_15min_intervals"] = forecast_data[
                     "full_day_forecast"
                 ]
 
