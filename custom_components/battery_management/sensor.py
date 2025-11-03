@@ -19,7 +19,14 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from .const import DOMAIN, ATTR_BATTERY_LEVEL, ATTR_IS_CHARGING
+from .const import (
+    DOMAIN, 
+    ATTR_BATTERY_LEVEL, 
+    ATTR_IS_CHARGING,
+    UNIT_KW,
+    UNIT_KWH,
+    UNIT_PERCENTAGE,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,7 +71,9 @@ class BatteryDataUpdateCoordinator(DataUpdateCoordinator):
         self.growatt_password = config_entry.data.get("growatt_password")
         self.pv_max_power = config_entry.data.get("pv_max_power", 10.0)
         self.battery_capacity = config_entry.data.get("battery_capacity", 10.0)
-        self.min_discharge_percentage = config_entry.data.get("min_discharge_percentage", 10)
+        self.min_discharge_percentage = config_entry.data.get(
+            "min_discharge_percentage", 10
+        )
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch battery data."""
@@ -75,8 +84,11 @@ class BatteryDataUpdateCoordinator(DataUpdateCoordinator):
             # self.pv_max_power (kW), self.battery_capacity (kWh), self.min_discharge_percentage (%)
             # For now, we'll simulate battery data
             _LOGGER.debug(
-                "Fetching battery data for GROWATT user: %s (PV: %skW, Battery: %skWh, Min discharge: %s%%)", 
-                self.growatt_username, self.pv_max_power, self.battery_capacity, self.min_discharge_percentage
+                "Fetching battery data for GROWATT user: %s (PV: %skW, Battery: %skWh, Min discharge: %s%%)",
+                self.growatt_username,
+                self.pv_max_power,
+                self.battery_capacity,
+                self.min_discharge_percentage,
             )
             return {
                 ATTR_BATTERY_LEVEL: 85,  # Simulated battery level
@@ -117,9 +129,18 @@ class BatteryLevelSensor(CoordinatorEntity, SensorEntity):
             "threshold": self._config_entry.data.get("low_battery_threshold", 20),
             "is_low": self.native_value
             < self._config_entry.data.get("low_battery_threshold", 20),
-            "pv_max_power_kw": self._config_entry.data.get("pv_max_power", 10.0),
-            "battery_capacity_kwh": self._config_entry.data.get("battery_capacity", 10.0),
-            "min_discharge_percentage": self._config_entry.data.get("min_discharge_percentage", 10),
+            "pv_max_power": {
+                "value": self._config_entry.data.get("pv_max_power", 10.0),
+                "unit": UNIT_KW
+            },
+            "battery_capacity": {
+                "value": self._config_entry.data.get("battery_capacity", 10.0),
+                "unit": UNIT_KWH
+            },
+            "min_discharge_percentage": {
+                "value": self._config_entry.data.get("min_discharge_percentage", 10),
+                "unit": UNIT_PERCENTAGE
+            },
         }
 
 

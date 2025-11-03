@@ -24,6 +24,12 @@ ATTR_BATTERY_LEVEL = "battery_level"
 ATTR_IS_CHARGING = "is_charging"
 ATTR_LAST_UPDATED = "last_updated"
 
+# Units of measurement
+UNIT_KW = "kW"
+UNIT_KWH = "kWh"
+UNIT_PERCENTAGE = "%"
+UNIT_SECONDS = "s"
+
 # Services
 SERVICE_SET_BATTERY_THRESHOLD = "set_battery_threshold"
 SERVICE_CHECK_BATTERY_STATUS = "check_battery_status"

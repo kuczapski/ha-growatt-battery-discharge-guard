@@ -3,7 +3,7 @@
         "step": {
             "user": {
                 "title": "Setup GROWATT Battery Discharge Guard",
-                "description": "Configure your GROWATT Battery Discharge Guard integration",
+                "description": "Configure your GROWATT Battery Discharge Guard integration. Enter your system specifications and monitoring preferences.",
                 "data": {
                     "name": "Integration Name",
                     "growatt_username": "GROWATT Username",
@@ -12,16 +12,16 @@
                     "battery_capacity": "Battery Capacity (kWh)",
                     "min_discharge_percentage": "Minimum Discharge Percentage (%)",
                     "update_interval": "Update Interval (seconds)",
-                    "low_battery_threshold": "Low Battery Threshold (%)"
+                    "low_battery_threshold": "Low Battery Alert Threshold (%)"
                 }
             }
         },
         "error": {
-            "threshold_too_high": "Threshold cannot be higher than 100%",
+            "threshold_too_high": "Battery threshold cannot be higher than 100%",
             "discharge_too_high": "Discharge percentage cannot be higher than 100%",
             "discharge_too_low": "Discharge percentage cannot be negative",
-            "power_invalid": "PV max power must be greater than 0",
-            "capacity_invalid": "Battery capacity must be greater than 0",
+            "power_invalid": "PV max power must be greater than 0 kW",
+            "capacity_invalid": "Battery capacity must be greater than 0 kWh",
             "username_required": "GROWATT username is required",
             "password_required": "GROWATT password is required"
         }
@@ -30,7 +30,7 @@
         "step": {
             "init": {
                 "title": "Configure GROWATT Battery Discharge Guard",
-                "description": "Update your GROWATT settings",
+                "description": "Update your GROWATT system specifications and monitoring settings",
                 "data": {
                     "growatt_username": "GROWATT Username",
                     "growatt_password": "GROWATT Password",
@@ -38,7 +38,7 @@
                     "battery_capacity": "Battery Capacity (kWh)",
                     "min_discharge_percentage": "Minimum Discharge Percentage (%)",
                     "update_interval": "Update Interval (seconds)",
-                    "low_battery_threshold": "Low Battery Threshold (%)"
+                    "low_battery_threshold": "Low Battery Alert Threshold (%)"
                 }
             }
         }

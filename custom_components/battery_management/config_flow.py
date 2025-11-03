@@ -108,7 +108,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     ): vol.Coerce(float),
                     vol.Optional(
                         "min_discharge_percentage",
-                        default=self.config_entry.data.get("min_discharge_percentage", 10),
+                        default=self.config_entry.data.get(
+                            "min_discharge_percentage", 10
+                        ),
                     ): cv.positive_int,
                     vol.Optional(
                         "update_interval",
