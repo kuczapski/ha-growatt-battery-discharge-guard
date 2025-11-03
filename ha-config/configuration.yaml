@@ -1,0 +1,23 @@
+default_config:
+
+# Text to speech
+tts:
+  - platform: google_translate
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+
+# Enable the frontend
+frontend:
+  themes: !include_dir_merge_named themes
+
+# Uncomment this if you are using SSL/TLS, running in Docker container, etc.
+# http:
+#   base_url: example.duckdns.org:8123
+
+# Logger configuration for debugging custom components
+logger:
+  default: info
+  logs:
+    custom_components.battery_management: debug

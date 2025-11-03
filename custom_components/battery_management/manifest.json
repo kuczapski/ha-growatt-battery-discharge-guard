@@ -1,0 +1,18 @@
+{
+  "domain": "battery_management",
+  "name": "GROWATT Battery Discharge Guard",
+  "codeowners": [
+    "@your-github-username"
+  ],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/your-username/ha-battery-management",
+  "homeassistant": "2023.1.0",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/your-username/ha-battery-management/issues",
+  "quality_scale": "silver",
+  "requirements": [
+    "homeassistant>=2023.1.0"
+  ],
+  "version": "1.0.0"
+}
