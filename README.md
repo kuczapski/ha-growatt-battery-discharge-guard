@@ -7,7 +7,9 @@ A custom Home Assistant integration for monitoring and managing GROWATT battery 
 - 🔋 **Battery Level Monitoring**: Real-time battery level tracking from GROWATT servers
 - ⚡ **Charging Status Detection**: Monitor charging state and power consumption
 - 🛡️ **Discharge Protection**: Configurable low battery alerts and protection
-- 🎛️ **Configurable Thresholds**: Set custom low battery alerts and update intervals
+- � **Solar Awareness**: Sunset time tracking for solar-aware battery management
+- ⏰ **Time-based Optimization**: Countdown to sunset for energy planning
+- �🎛️ **Configurable Thresholds**: Set custom low battery alerts and update intervals
 - 🔄 **Auto-refresh**: Configurable update intervals for real-time monitoring
 - 🎚️ **Battery Optimization**: Enable/disable power optimization modes
 
@@ -39,11 +41,14 @@ The integration can be configured through the Home Assistant UI:
 
 1. Go to **Settings** → **Devices & Services**
 2. Click **Add Integration**
-3. Search for "Battery Management"
-3. Configure with your GROWATT credentials:
+3. Search for "GROWATT Battery Discharge Guard"
+4. Configure with your GROWATT credentials and system parameters:
    - **Name**: Custom name for your battery management instance
    - **GROWATT Username**: Your GROWATT server username
    - **GROWATT Password**: Your GROWATT server password
+   - **PV Installation Max Power (kW)**: Maximum power output of your solar panels
+   - **Battery Capacity (kWh)**: Total capacity of your battery system
+   - **Minimum discharge percentage (%)**: Minimum battery level for discharge protection
    - **Update Interval**: How often to check battery status (seconds)
    - **Low Battery Threshold**: Battery level percentage to trigger low battery alerts
 
@@ -53,6 +58,10 @@ The integration can be configured through the Home Assistant UI:
 
 - `sensor.growatt_battery_discharge_guard_level`: Current battery level (%)
 - `sensor.growatt_battery_discharge_guard_charging`: Charging status (charging/not_charging/unknown)
+- `sensor.growatt_battery_discharge_guard_sunset_time`: Expected sunset time (timestamp)
+- `sensor.growatt_battery_discharge_guard_time_until_sunset`: Time remaining until sunset (duration in seconds)
+
+The sunset entities use your Home Assistant's configured location to calculate accurate sunrise and sunset times, enabling solar-aware battery management and energy planning.
 
 ### Switches
 

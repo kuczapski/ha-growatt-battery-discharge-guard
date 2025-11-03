@@ -12,7 +12,8 @@
   "issue_tracker": "https://github.com/your-username/ha-battery-management/issues",
   "quality_scale": "silver",
   "requirements": [
-    "homeassistant>=2023.1.0"
+    "homeassistant>=2023.1.0",
+    "astral>=3.2"
   ],
   "version": "1.0.0"
 }

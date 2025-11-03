@@ -1,8 +1,11 @@
 """GROWATT Battery Discharge Guard sensor platform."""
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
+
+from astral import LocationInfo
+from astral.sun import sun
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -10,7 +13,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfTime
+from homeassistant.const import PERCENTAGE, UnitOfTime, CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
@@ -20,8 +23,8 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .const import (
-    DOMAIN, 
-    ATTR_BATTERY_LEVEL, 
+    DOMAIN,
+    ATTR_BATTERY_LEVEL,
     ATTR_IS_CHARGING,
     UNIT_KW,
     UNIT_KWH,
@@ -46,6 +49,8 @@ async def async_setup_entry(
     entities = [
         BatteryLevelSensor(coordinator, config_entry),
         BatteryChargingSensor(coordinator, config_entry),
+        SunsetTimeSensor(coordinator, config_entry, hass),
+        SunsetCountdownSensor(coordinator, config_entry, hass),
     ]
 
     async_add_entities(entities)
@@ -131,15 +136,15 @@ class BatteryLevelSensor(CoordinatorEntity, SensorEntity):
             < self._config_entry.data.get("low_battery_threshold", 20),
             "pv_max_power": {
                 "value": self._config_entry.data.get("pv_max_power", 10.0),
-                "unit": UNIT_KW
+                "unit": UNIT_KW,
             },
             "battery_capacity": {
                 "value": self._config_entry.data.get("battery_capacity", 10.0),
-                "unit": UNIT_KWH
+                "unit": UNIT_KWH,
             },
             "min_discharge_percentage": {
                 "value": self._config_entry.data.get("min_discharge_percentage", 10),
-                "unit": UNIT_PERCENTAGE
+                "unit": UNIT_PERCENTAGE,
             },
         }
 
@@ -167,3 +172,180 @@ class BatteryChargingSensor(CoordinatorEntity, SensorEntity):
         if is_charging is None:
             return "unknown"
         return "charging" if is_charging else "not_charging"
+
+
+class SunsetTimeSensor(SensorEntity):
+    """Sensor showing the expected sunset time."""
+
+    def __init__(
+        self, coordinator: BatteryDataUpdateCoordinator, config_entry: ConfigEntry, hass
+    ) -> None:
+        """Initialize the sensor."""
+        self.coordinator = coordinator
+        self.config_entry = config_entry
+        self.hass = hass
+        self._attr_name = f"{config_entry.data[CONF_NAME]} Sunset Time"
+        self._attr_unique_id = f"{config_entry.entry_id}_sunset_time"
+        self._attr_device_class = SensorDeviceClass.TIMESTAMP
+        self._attr_icon = "mdi:weather-sunset"
+
+    @property
+    def state(self) -> str | None:
+        """Return the sunset time."""
+        try:
+            # Get Home Assistant's configured location
+            latitude = self.hass.config.latitude
+            longitude = self.hass.config.longitude
+            timezone = self.hass.config.time_zone
+
+            # Create location info
+            location = LocationInfo("Home", "Home", timezone, latitude, longitude)
+
+            # Calculate sunset for today
+            today = datetime.now().date()
+            s = sun(location.observer, date=today)
+
+            return s["sunset"].isoformat()
+        except Exception as e:
+            _LOGGER.error("Error calculating sunset time: %s", e)
+            return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes."""
+        try:
+            latitude = self.hass.config.latitude
+            longitude = self.hass.config.longitude
+            timezone = self.hass.config.time_zone
+
+            location = LocationInfo("Home", "Home", timezone, latitude, longitude)
+            today = datetime.now().date()
+            s = sun(location.observer, date=today)
+
+            return {
+                "sunrise": s["sunrise"].isoformat(),
+                "sunset": s["sunset"].isoformat(),
+                "dawn": s["dawn"].isoformat(),
+                "dusk": s["dusk"].isoformat(),
+                "latitude": latitude,
+                "longitude": longitude,
+                "timezone": timezone,
+            }
+        except Exception as e:
+            _LOGGER.error("Error calculating sun times: %s", e)
+            return {}
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return True
+
+    async def async_update(self) -> None:
+        """Update the entity."""
+        # This entity updates based on time/location, not coordinator data
+        pass
+
+
+class SunsetCountdownSensor(SensorEntity):
+    """Sensor showing remaining time until sunset."""
+
+    def __init__(
+        self, coordinator: BatteryDataUpdateCoordinator, config_entry: ConfigEntry, hass
+    ) -> None:
+        """Initialize the sensor."""
+        self.coordinator = coordinator
+        self.config_entry = config_entry
+        self.hass = hass
+        self._attr_name = f"{config_entry.data[CONF_NAME]} Time Until Sunset"
+        self._attr_unique_id = f"{config_entry.entry_id}_time_until_sunset"
+        self._attr_device_class = SensorDeviceClass.DURATION
+        self._attr_native_unit_of_measurement = "s"  # seconds
+        self._attr_icon = "mdi:timer-sand"
+
+    @property
+    def state(self) -> float | None:
+        """Return the time until sunset in seconds."""
+        try:
+            # Get Home Assistant's configured location
+            latitude = self.hass.config.latitude
+            longitude = self.hass.config.longitude
+            timezone = self.hass.config.time_zone
+
+            # Create location info
+            location = LocationInfo("Home", "Home", timezone, latitude, longitude)
+
+            # Calculate sunset for today
+            today = datetime.now().date()
+            s = sun(location.observer, date=today)
+            sunset_time = s["sunset"]
+
+            # Calculate time difference
+            now = datetime.now(sunset_time.tzinfo)
+            if sunset_time > now:
+                time_diff = sunset_time - now
+                return time_diff.total_seconds()
+            else:
+                # Sunset has passed, calculate for tomorrow
+                tomorrow = today + timedelta(days=1)
+                s_tomorrow = sun(location.observer, date=tomorrow)
+                sunset_tomorrow = s_tomorrow["sunset"]
+                time_diff = sunset_tomorrow - now
+                return time_diff.total_seconds()
+
+        except Exception as e:
+            _LOGGER.error("Error calculating time until sunset: %s", e)
+            return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes."""
+        try:
+            latitude = self.hass.config.latitude
+            longitude = self.hass.config.longitude
+            timezone = self.hass.config.time_zone
+
+            location = LocationInfo("Home", "Home", timezone, latitude, longitude)
+            today = datetime.now().date()
+            s = sun(location.observer, date=today)
+            sunset_time = s["sunset"]
+
+            now = datetime.now(sunset_time.tzinfo)
+
+            if sunset_time > now:
+                time_diff = sunset_time - now
+                hours = int(time_diff.total_seconds() // 3600)
+                minutes = int((time_diff.total_seconds() % 3600) // 60)
+                human_readable = f"{hours}h {minutes}m"
+                next_sunset = sunset_time
+            else:
+                # Sunset has passed, show tomorrow's sunset
+                tomorrow = today + timedelta(days=1)
+                s_tomorrow = sun(location.observer, date=tomorrow)
+                next_sunset = s_tomorrow["sunset"]
+                time_diff = next_sunset - now
+                hours = int(time_diff.total_seconds() // 3600)
+                minutes = int((time_diff.total_seconds() % 3600) // 60)
+                human_readable = f"{hours}h {minutes}m (tomorrow)"
+
+            return {
+                "next_sunset": next_sunset.isoformat(),
+                "human_readable": human_readable,
+                "hours_remaining": int(time_diff.total_seconds() // 3600),
+                "minutes_remaining": int((time_diff.total_seconds() % 3600) // 60),
+                "latitude": latitude,
+                "longitude": longitude,
+                "timezone": timezone,
+            }
+        except Exception as e:
+            _LOGGER.error("Error calculating countdown attributes: %s", e)
+            return {}
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return True
+
+    async def async_update(self) -> None:
+        """Update the entity."""
+        # This entity updates based on time/location, not coordinator data
+        pass
