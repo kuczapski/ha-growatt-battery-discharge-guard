@@ -239,3 +239,22 @@ Each forecast entry contains:
 - Use the **Remaining Energy Card** to track what's left for the day
 
 Choose the configuration that best fits your dashboard layout and information needs!
+
+## Custom Solar Power Curve Card
+
+For a more interactive and visually appealing display, check out our **Custom Solar Power Curve Card** (`solar-power-curve-card.js`). This custom card provides:
+
+- **Real-time current time indicator** with a vertical line
+- **Color-coded past vs future** power generation
+- **Highlighted remaining energy area** with kWh overlay
+- **Clean SVG graphics** that adapt to your theme
+- **Lightweight and fast** rendering
+
+See `SOLAR_POWER_CURVE_CARD.md` for installation and configuration details.
+
+**Quick setup:**
+```yaml
+type: custom:solar-power-curve-card
+entity: sensor.solar_energy_forecast
+title: "☀️ Today's Solar Production"
+```
