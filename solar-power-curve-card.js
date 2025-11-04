@@ -189,20 +189,23 @@ class SolarPowerCurveCard extends HTMLElement {
         ha-card {
           display: block;
           padding: 16px;
-          background: ${themeColors.cardBackground};
+          background: ${isDarkMode ? 'linear-gradient(135deg, #0f1419 0%, #1a1f2e 50%, #2d1b69 100%)' : themeColors.cardBackground};
           border-radius: 12px;
-          box-shadow: ${themeColors.cardShadow};
+          box-shadow: ${isDarkMode ? '0 8px 32px rgba(255, 165, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)' : themeColors.cardShadow};
           margin: 0;
           width: 100%;
           min-height: 160px;
           box-sizing: border-box;
+          position: relative;
+          overflow: hidden;
         }
         .card-title {
           font-size: 1.1em;
-          font-weight: 500;
+          font-weight: 600;
           margin: 0 0 12px 0;
-          color: ${themeColors.primaryText};
+          color: ${isDarkMode ? '#FFD700' : themeColors.primaryText};
           display: block;
+          text-shadow: ${isDarkMode ? '0 0 10px rgba(255, 215, 0, 0.5)' : 'none'};
         }
         .chart-container {
           width: 100%;
@@ -218,23 +221,27 @@ class SolarPowerCurveCard extends HTMLElement {
           max-width: none;
         }
         .power-curve {
-          stroke: #ff6b35;
-          stroke-width: 2;
+          stroke: url(#glowGradientFuture);
+          stroke-width: 3;
           fill: none;
+          filter: drop-shadow(0 0 8px #ff6b35);
         }
         .power-curve-past {
-          stroke: ${isDarkMode ? '#888' : '#666'};
+          stroke: ${isDarkMode ? 'url(#glowGradientPast)' : '#666'};
           stroke-width: 2;
           fill: none;
+          filter: ${isDarkMode ? 'drop-shadow(0 0 4px #888)' : 'none'};
         }
         .future-area {
-          fill: rgba(255, 107, 53, 0.2);
+          fill: url(#areaGradient);
           stroke: none;
+          filter: ${isDarkMode ? 'drop-shadow(0 0 15px rgba(255, 165, 0, 0.6))' : 'none'};
         }
         .current-time-line {
-          stroke: #2196f3;
+          stroke: ${isDarkMode ? '#00BFFF' : '#2196f3'};
           stroke-width: 2;
           stroke-dasharray: 5,5;
+          filter: ${isDarkMode ? 'drop-shadow(0 0 6px #00BFFF)' : 'none'};
         }
         .grid-line {
           stroke: ${themeColors.dividerColor};
@@ -242,10 +249,11 @@ class SolarPowerCurveCard extends HTMLElement {
           opacity: 0.3;
         }
         .energy-text {
-          font-size: 12px;
-          font-weight: 600;
-          fill: #ff6b35;
+          font-size: 14px;
+          font-weight: 700;
+          fill: ${isDarkMode ? '#FFD700' : '#ff6b35'};
           text-anchor: end;
+          filter: ${isDarkMode ? 'drop-shadow(0 0 8px #FFD700)' : 'none'};
         }
         .error, .no-data {
           padding: 20px;
@@ -258,23 +266,66 @@ class SolarPowerCurveCard extends HTMLElement {
         <div class="card-title">${cardTitle}</div>
         <div class="chart-container">
           <svg class="chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">
+            <!-- Gradients and Effects -->
+            <defs>
+              <!-- Glowing gradient for future power curve -->
+              <linearGradient id="glowGradientFuture" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style="stop-color:#ff6b35;stop-opacity:1" />
+                <stop offset="50%" style="stop-color:#ffa726;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#ffcc02;stop-opacity:1" />
+              </linearGradient>
+              
+              <!-- Glowing gradient for past power curve -->
+              <linearGradient id="glowGradientPast" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style="stop-color:#666;stop-opacity:0.8" />
+                <stop offset="50%" style="stop-color:#888;stop-opacity:0.9" />
+                <stop offset="100%" style="stop-color:#aaa;stop-opacity:0.8" />
+              </linearGradient>
+              
+              <!-- Radial gradient for future area with glow effect -->
+              <radialGradient id="areaGradient" cx="50%" cy="70%" r="80%">
+                <stop offset="0%" style="stop-color:#ffcc02;stop-opacity:0.8" />
+                <stop offset="30%" style="stop-color:#ffa726;stop-opacity:0.6" />
+                <stop offset="70%" style="stop-color:#ff6b35;stop-opacity:0.4" />
+                <stop offset="100%" style="stop-color:#d84315;stop-opacity:0.2" />
+              </radialGradient>
+              
+              <!-- Glow filter effects -->
+              <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                <feMerge> 
+                  <feMergeNode in="coloredBlur"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+              
+              <!-- Intense glow for energy text -->
+              <filter id="textGlow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+                <feMerge> 
+                  <feMergeNode in="coloredBlur"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+            </defs>
+            
             <!-- Minimal grid lines -->
             ${this.generateMinimalGridLines(width, height, margin)}
             
-            <!-- Future area fill -->
+            <!-- Future area fill with glow -->
             ${futureAreaPath ? `<path d="${futureAreaPath}" class="future-area"/>` : ''}
             
-            <!-- Power curves -->
+            <!-- Power curves with enhanced effects -->
             ${pathData ? `<path d="${pathData}" class="power-curve-past"/>` : ''}
             ${futurePathData ? `<path d="${futurePathData}" class="power-curve"/>` : ''}
             
-            <!-- Current time line -->
+            <!-- Current time line with glow -->
             <line x1="${currentTimeX}" y1="${margin.top}" 
                   x2="${currentTimeX}" y2="${margin.top + chartHeight}" 
                   class="current-time-line"/>
             
-            <!-- Energy remaining text (only numerical value and unit) -->
-            ${remainingEnergy > 0 ? `<text x="${textX}" y="${textY}" class="energy-text">${energyText}</text>` : ''}
+            <!-- Energy remaining text with enhanced glow -->
+            ${remainingEnergy > 0 ? `<text x="${textX}" y="${textY}" class="energy-text" filter="url(#textGlow)">${energyText}</text>` : ''}
           </svg>
         </div>
       </ha-card>
