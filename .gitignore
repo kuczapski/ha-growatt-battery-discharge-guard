@@ -76,13 +76,29 @@ Thumbs.db
 
 # Home Assistant specific
 *.log
-config/
-.HA_VERSION
-.storage/
-deps/
-ha-config/secrets.yaml
+
+# Home Assistant runtime files (ignore these)
+ha-config/.HA_VERSION
+ha-config/.ha_run.lock
 ha-config/.storage/
+ha-config/.cloud/
+ha-config/deps/
+ha-config/tts/
 ha-config/home-assistant.log*
+ha-config/home-assistant_v2.db*
+ha-config/secrets.yaml
+ha-config/known_devices.yaml
+ha-config/www/community/
+
+# Keep these configuration files as examples:
+# ha-config/configuration.yaml
+# ha-config/automations.yaml
+# ha-config/scenes.yaml
+# ha-config/scripts.yaml
+# ha-config/blueprints/
+
+# Custom components (main copy is in ./custom_components/)
+ha-config/custom_components/
 
 # Development
 .mypy_cache/
