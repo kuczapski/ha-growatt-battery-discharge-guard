@@ -144,7 +144,9 @@ def calculate_panel_irradiance(
         # Empirical clear-sky global horizontal irradiance
         ghi = dni * math.sin(sun_el) + 160.0  # Reduced base diffuse from 180 to 160
         diffuse = 0.25 * ghi  # Reduced diffuse component from 30% to 25%
-        reflected = 0.25 * (1 - math.cos(panel_tilt_rad)) * ghi / 2  # Reduced albedo from 0.3 to 0.25
+        reflected = (
+            0.25 * (1 - math.cos(panel_tilt_rad)) * ghi / 2
+        )  # Reduced albedo from 0.3 to 0.25
 
         panel_irradiance = max(0, dni * cos_incidence + diffuse + reflected)
 
@@ -556,6 +558,8 @@ class BatteryDataUpdateCoordinator(DataUpdateCoordinator):
         )
         self.panel_tilt_angle = config_entry.data.get("panel_tilt_angle", 30.0)
         self.panel_orientation = config_entry.data.get("panel_orientation", 180.0)
+        self.avg_daytime_load = config_entry.data.get("avg_daytime_load", 2.0)
+        self.avg_nighttime_load = config_entry.data.get("avg_nighttime_load", 1.0)
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch battery data."""
@@ -633,6 +637,14 @@ class BatteryLevelSensor(CoordinatorEntity, SensorEntity):
             "panel_orientation": {
                 "value": self._config_entry.data.get("panel_orientation", 180.0),
                 "unit": UNIT_DEGREES,
+            },
+            "avg_daytime_load": {
+                "value": self._config_entry.data.get("avg_daytime_load", 2.0),
+                "unit": UNIT_KW,
+            },
+            "avg_nighttime_load": {
+                "value": self._config_entry.data.get("avg_nighttime_load", 1.0),
+                "unit": UNIT_KW,
             },
         }
 
@@ -939,12 +951,15 @@ class SolarEnergyForecastSensor(SensorEntity):
             panel_tilt = self.config_entry.data.get("panel_tilt_angle", 30.0)
             panel_orientation = self.config_entry.data.get("panel_orientation", 180.0)
             pv_max_power = self.config_entry.data.get("pv_max_power", 10.0)
+            avg_daytime_load = self.config_entry.data.get("avg_daytime_load", 2.0)
+            avg_nighttime_load = self.config_entry.data.get("avg_nighttime_load", 1.0)
 
             _LOGGER.info(
                 "🌞 Solar Energy Forecast: Starting calculation - "
                 f"Location: {latitude:.2f}°N, {longitude:.2f}°E, "
                 f"Timezone: {timezone}, Panel: {panel_tilt}°/{panel_orientation}°, "
-                f"Max Power: {pv_max_power} kW"
+                f"Max Power: {pv_max_power} kW, "
+                f"Loads: {avg_daytime_load}kW day/{avg_nighttime_load}kW night"
             )
 
             # Calculate forecast
@@ -981,6 +996,8 @@ class SolarEnergyForecastSensor(SensorEntity):
             panel_tilt = self.config_entry.data.get("panel_tilt_angle", 30.0)
             panel_orientation = self.config_entry.data.get("panel_orientation", 180.0)
             pv_max_power = self.config_entry.data.get("pv_max_power", 10.0)
+            avg_daytime_load = self.config_entry.data.get("avg_daytime_load", 2.0)
+            avg_nighttime_load = self.config_entry.data.get("avg_nighttime_load", 1.0)
 
             _LOGGER.debug("📋 Solar Energy Forecast: Calculating attributes")
 
@@ -1003,6 +1020,8 @@ class SolarEnergyForecastSensor(SensorEntity):
                 "panel_tilt_angle": panel_tilt,
                 "panel_orientation": panel_orientation,
                 "pv_max_power_kw": pv_max_power,
+                "avg_daytime_load_kw": avg_daytime_load,
+                "avg_nighttime_load_kw": avg_nighttime_load,
                 "latitude": latitude,
                 "longitude": longitude,
                 "timezone": timezone,

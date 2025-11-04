@@ -13,6 +13,8 @@
                     "min_discharge_percentage": "Minimum Discharge Percentage (%)",
                     "panel_tilt_angle": "Solar Panel Tilt Angle (°)",
                     "panel_orientation": "Solar Panel Orientation (° from South)",
+                    "avg_daytime_load": "Average Daytime Load (kW)",
+                    "avg_nighttime_load": "Average Nighttime Load (kW)",
                     "update_interval": "Update Interval (seconds)",
                     "low_battery_threshold": "Low Battery Alert Threshold (%)"
                 }
@@ -26,6 +28,7 @@
             "capacity_invalid": "Battery capacity must be greater than 0 kWh",
             "tilt_angle_invalid": "Panel tilt angle must be between 0° and 90°",
             "orientation_invalid": "Panel orientation must be between 0° and 359°",
+            "load_invalid": "Load value must be greater than 0 kW",
             "username_required": "GROWATT username is required",
             "password_required": "GROWATT password is required"
         }
@@ -43,6 +46,8 @@
                     "min_discharge_percentage": "Minimum Discharge Percentage (%)",
                     "panel_tilt_angle": "Solar Panel Tilt Angle (°)",
                     "panel_orientation": "Solar Panel Orientation (° from South)",
+                    "avg_daytime_load": "Average Daytime Load (kW)",
+                    "avg_nighttime_load": "Average Nighttime Load (kW)",
                     "update_interval": "Update Interval (seconds)",
                     "low_battery_threshold": "Low Battery Alert Threshold (%)"
                 }

@@ -108,7 +108,9 @@ def calculate_panel_irradiance(
     # Enhanced empirical clear-sky global horizontal irradiance
     ghi = dni * math.sin(elev_rad) + 160.0  # Reduced base diffuse from 180 to 160
     diffuse = 0.25 * ghi  # Reduced diffuse component from 30% to 25%
-    reflected = 0.25 * (1 - math.cos(tilt_rad)) * ghi / 2  # Reduced albedo from 0.3 to 0.25
+    reflected = (
+        0.25 * (1 - math.cos(tilt_rad)) * ghi / 2
+    )  # Reduced albedo from 0.3 to 0.25
 
     panel_irradiance = max(0, dni * cos_incidence + diffuse + reflected)
 

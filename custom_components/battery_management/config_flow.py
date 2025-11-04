@@ -21,6 +21,8 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional("min_discharge_percentage", default=10): cv.positive_int,
         vol.Optional("panel_tilt_angle", default=30.0): vol.Coerce(float),
         vol.Optional("panel_orientation", default=180.0): vol.Coerce(float),
+        vol.Optional("avg_daytime_load", default=2.0): vol.Coerce(float),
+        vol.Optional("avg_nighttime_load", default=1.0): vol.Coerce(float),
         vol.Optional("update_interval", default=30): cv.positive_int,
         vol.Optional("low_battery_threshold", default=20): cv.positive_int,
     }
@@ -60,6 +62,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 or user_input["panel_orientation"] >= 360
             ):
                 errors["panel_orientation"] = "orientation_invalid"
+            elif user_input["avg_daytime_load"] <= 0:
+                errors["avg_daytime_load"] = "load_invalid"
+            elif user_input["avg_nighttime_load"] <= 0:
+                errors["avg_nighttime_load"] = "load_invalid"
             elif not user_input.get("growatt_username"):
                 errors["growatt_username"] = "username_required"
             elif not user_input.get("growatt_password"):
@@ -124,6 +130,22 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                             "min_discharge_percentage", 10
                         ),
                     ): cv.positive_int,
+                    vol.Optional(
+                        "panel_tilt_angle",
+                        default=self.config_entry.data.get("panel_tilt_angle", 30.0),
+                    ): vol.Coerce(float),
+                    vol.Optional(
+                        "panel_orientation",
+                        default=self.config_entry.data.get("panel_orientation", 180.0),
+                    ): vol.Coerce(float),
+                    vol.Optional(
+                        "avg_daytime_load",
+                        default=self.config_entry.data.get("avg_daytime_load", 2.0),
+                    ): vol.Coerce(float),
+                    vol.Optional(
+                        "avg_nighttime_load",
+                        default=self.config_entry.data.get("avg_nighttime_load", 1.0),
+                    ): vol.Coerce(float),
                     vol.Optional(
                         "update_interval",
                         default=self.config_entry.options.get("update_interval", 30),
